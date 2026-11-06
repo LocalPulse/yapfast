@@ -805,6 +805,53 @@ fn up_in_an_empty_composer_edits_the_newest_own_message() {
 }
 
 #[test]
+fn an_apps_buttons_press_unless_disabled() {
+    use crate::chat::{Beside, ButtonStyle, Card, CardButton, CardRow};
+    let mut app = connected();
+    let button = |custom_id: &str, disabled| CardButton {
+        label: custom_id.into(),
+        style: ButtonStyle::Primary,
+        url: None,
+        disabled,
+        custom_id: Some(custom_id.into()),
+    };
+    let deployed = ChatMessage {
+        cards: vec![Card {
+            framed: false,
+            color: None,
+            rows: vec![
+                CardRow::Text {
+                    text: "Deploy finished".into(),
+                    beside: Some(Beside::Button(button("details", false))),
+                },
+                CardRow::Buttons(vec![button("approve", false), button("retry", true)]),
+            ],
+        }],
+        ..message("d:7", false)
+    };
+    app.apply(Event::Timeline {
+        room: "dm".into(),
+        messages: timeline(vec![deployed]),
+    });
+    let press = |app: &mut Application, custom_id: &str| {
+        app.dispatch(Action::PressButton {
+            item: "d:7".into(),
+            custom_id: custom_id.into(),
+        })
+    };
+    for custom_id in ["approve", "details"] {
+        assert!(matches!(
+            press(&mut app, custom_id).as_slice(),
+            [Effect::Backend(Command::PressButton { room, item, custom_id: pressed })]
+                if room == "dm" && item == "d:7" && pressed == custom_id
+        ));
+    }
+    // A disabled button, and one the message doesn't have, do nothing.
+    assert!(press(&mut app, "retry").is_empty());
+    assert!(press(&mut app, "unknown").is_empty());
+}
+
+#[test]
 fn blocked_messages_can_leave_the_timeline_and_come_back() {
     let mut app = connected();
     let blocked = ChatMessage {

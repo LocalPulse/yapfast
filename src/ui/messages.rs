@@ -920,7 +920,8 @@ fn card_button(
             ButtonStyle::Link => CardButtonStyle::Link,
         },
         url: button.url.clone().unwrap_or_default().into(),
-        enabled: button.url.is_some() && !button.disabled,
+        custom_id: button.custom_id.clone().unwrap_or_default().into(),
+        enabled: (button.url.is_some() || button.custom_id.is_some()) && !button.disabled,
     }
 }
 

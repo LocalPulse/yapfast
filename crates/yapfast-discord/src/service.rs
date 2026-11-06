@@ -354,6 +354,18 @@ impl std::fmt::Debug for SharedNames {
     }
 }
 
+/// A press of an app's button on a message, for [`Discord::press_button`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Press {
+    /// The message's server; none in a DM.
+    pub guild: Option<String>,
+    pub channel: String,
+    pub message: String,
+    pub message_flags: u64,
+    pub application: String,
+    pub custom_id: String,
+}
+
 /// A message event from the gateway, for any channel.
 #[derive(Clone, Debug)]
 pub enum Live {
@@ -918,6 +930,21 @@ impl Discord {
         self.api.vote(channel, id, answers).await
     }
 
+    /// Presses an app's button on a message, from this gateway session,
+    /// which hears whether the app took it.
+    pub async fn press_button(&self, press: Press) -> Result<()> {
+        let (reply, answer) = oneshot::channel();
+        self.requests
+            .send(Request::Session(reply))
+            .map_err(|_| anyhow!("Discord isn't connected. Restart Yapfast and try again."))?;
+        let session = answer
+            .await
+            .ok()
+            .flatten()
+            .context("Discord isn't connected yet. Try again in a moment.")?;
+        self.api.press_button(&press, &session).await
+    }
+
     /// Closes this account's poll now.
     pub async fn end_poll(&self, channel: &str, id: &str) -> Result<()> {
         self.api.end_poll(channel, id).await
@@ -1295,7 +1322,24 @@ impl Discord {
             kept(earlier);
         }
         let value = self.api.profile(user, server(guild)).await?;
-        self.write_names().learn_user(&value["user"]);
+        let learned = {
+            let mut names = self.write_names();
+            let before = names.version();
+            names.learn_user(&value["user"]);
+            // The profile carries the member's roles, which messages colour
+            // names by: messages fetched over HTTP left them unknown.
+            if let Some(guild) = server(guild)
+                && let Value::Object(member) = &value["guild_member"]
+            {
+                let mut member = member.clone();
+                member.insert("user_id".into(), user.into());
+                names.learn_member(guild, &Value::Object(member));
+            }
+            names.version() != before
+        };
+        if learned {
+            let _ = self.live.send(Live::Names);
+        }
         let profile = profile::parse(&value, server(guild))
             .ok_or_else(|| anyhow!("could not understand Discord's answer"))?;
         {

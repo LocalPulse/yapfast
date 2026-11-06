@@ -617,6 +617,14 @@ impl OpenChannel {
         changed
     }
 
+    /// Whether a name, avatar or role its messages show changed since they
+    /// were rendered, as a member list teaches them; it's dirty if so.
+    pub(super) fn names_changed(&mut self, discord: &Discord) -> bool {
+        let changed = discord.names_version() != self.rendered_with.names;
+        self.dirty |= changed;
+        changed
+    }
+
     fn apply_live(&mut self, event: &Live) -> bool {
         match event {
             // A window of older messages takes no new ones.
@@ -945,6 +953,51 @@ impl OpenChannel {
         let (room, channel, id) = (self.room.clone(), self.channel.clone(), message.id.clone());
         tokio::spawn(async move {
             if let Err(error) = discord.react(&channel, &id, &emoji, add).await {
+                let _ = done.send(Done::Failed {
+                    room,
+                    message: error.to_string(),
+                });
+            }
+        });
+    }
+
+    /// Presses the button of `item` that the app named `custom_id`, as a
+    /// component interaction; the app answers in the channel, or Discord
+    /// says it failed.
+    pub fn press_button(
+        &self,
+        discord: &Discord,
+        done: &UnboundedSender<Done>,
+        item: &str,
+        custom_id: String,
+    ) {
+        let Some(message) =
+            sent_id(item).and_then(|id| self.message(id.parse().unwrap_or_default()))
+        else {
+            return;
+        };
+        let Some(application) = message.application_id.clone() else {
+            return;
+        };
+        let pressable = message
+            .components
+            .iter()
+            .flat_map(|card| card.buttons())
+            .any(|button| !button.disabled && button.custom_id.as_deref() == Some(&custom_id));
+        if !pressable {
+            return;
+        }
+        let press = yapfast_discord::service::Press {
+            guild: (self.guild != crate::discord::DM_GUILD).then(|| self.guild.clone()),
+            channel: self.channel.clone(),
+            message: message.id.clone(),
+            message_flags: message.flags,
+            application,
+            custom_id,
+        };
+        let (discord, done, room) = (discord.clone(), done.clone(), self.room.clone());
+        tokio::spawn(async move {
+            if let Err(error) = discord.press_button(press).await {
                 let _ = done.send(Done::Failed {
                     room,
                     message: error.to_string(),

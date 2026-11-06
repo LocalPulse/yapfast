@@ -1762,6 +1762,90 @@ async fn sends_edits_and_deletes_messages() {
 
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "starts testing/fake_discord.ts with bun; run scripts/test-fake-discord"]
+async fn presses_an_apps_buttons() {
+    let Fixture {
+        _fake,
+        discord,
+        server,
+        guild,
+        general,
+        ..
+    } = Fixture::start("presses_an_apps_buttons").await;
+    let control = reqwest::Client::new();
+    let mut live = discord.live();
+    control
+        .post(format!("{server}/_control/components"))
+        .send()
+        .await
+        .unwrap();
+    // Status Bot's message of buttons, by its app, which is the bot.
+    let deployed = live_where(&mut live, |event| match event {
+        Live::Created(message) if message.content.starts_with("Deploy") => Some(message),
+        _ => None,
+    })
+    .await;
+    assert_eq!(
+        deployed.application_id.as_deref(),
+        Some(deployed.author_id.as_str())
+    );
+    let ids: Vec<_> = deployed
+        .components
+        .iter()
+        .flat_map(|card| card.buttons())
+        .map(|button| (button.custom_id.as_deref(), button.disabled))
+        .collect();
+    assert_eq!(
+        ids,
+        [
+            (Some("approve"), false),
+            (Some("rollback"), false),
+            (Some("retry"), true),
+            // A link has no custom id.
+            (None, false),
+        ]
+    );
+    let press = yapfast_discord::service::Press {
+        guild: Some(guild.clone()),
+        channel: general.clone(),
+        message: deployed.id.clone(),
+        message_flags: deployed.flags,
+        application: deployed.application_id.clone().unwrap(),
+        custom_id: "approve".into(),
+    };
+    discord.press_button(press).await.unwrap();
+    let sent = control
+        .get(format!("{server}/_control/interactions"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    let sent: Vec<serde_json::Value> = serde_json::from_str(&sent).unwrap();
+    let [sent] = sent.as_slice() else {
+        panic!("one interaction, not {sent:?}")
+    };
+    assert_eq!(sent["type"], 3);
+    assert_eq!(sent["guild_id"], guild.as_str());
+    assert_eq!(sent["channel_id"], general.as_str());
+    assert_eq!(sent["message_id"], deployed.id.as_str());
+    assert_eq!(sent["application_id"], deployed.author_id.as_str());
+    assert_eq!(sent["data"]["component_type"], 2);
+    assert_eq!(sent["data"]["custom_id"], "approve");
+    assert!(
+        sent["session_id"]
+            .as_str()
+            .is_some_and(|session| !session.is_empty())
+    );
+    assert!(
+        sent["nonce"]
+            .as_str()
+            .is_some_and(|nonce| !nonce.is_empty())
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "starts testing/fake_discord.ts with bun; run scripts/test-fake-discord"]
 async fn votes_in_and_posts_polls() {
     let Fixture {
         _fake,

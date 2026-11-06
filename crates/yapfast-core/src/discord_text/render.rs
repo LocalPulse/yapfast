@@ -639,6 +639,7 @@ pub(super) fn chat_card(
         },
         url: button.url.clone(),
         disabled: button.disabled,
+        custom_id: button.custom_id.clone(),
     };
     Card {
         framed: card.framed,

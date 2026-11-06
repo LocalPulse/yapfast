@@ -55,6 +55,41 @@ impl Application {
         }
     }
 
+    pub(super) fn press_button(&mut self, item: String, custom_id: String) -> Vec<Effect> {
+        let Some(room) = self.state.room_of(&item).cloned() else {
+            return vec![];
+        };
+        if self.state.preview {
+            return vec![];
+        }
+        use chat::{Beside, CardButton, CardRow};
+        let pressable = self.state.message(&item).is_some_and(|message| {
+            message.cards.iter().any(|card| {
+                card.rows.iter().any(|row| {
+                    let buttons: &[CardButton] = match row {
+                        CardRow::Buttons(buttons) => buttons,
+                        CardRow::Text {
+                            beside: Some(Beside::Button(button)),
+                            ..
+                        } => std::slice::from_ref(button),
+                        _ => &[],
+                    };
+                    buttons.iter().any(|button| {
+                        !button.disabled && button.custom_id.as_deref() == Some(&custom_id)
+                    })
+                })
+            })
+        });
+        if !pressable {
+            return vec![];
+        }
+        vec![Effect::Backend(Command::PressButton {
+            room,
+            item,
+            custom_id,
+        })]
+    }
+
     pub(super) fn request_delete(&mut self, item: String) -> Vec<Effect> {
         if self
             .state

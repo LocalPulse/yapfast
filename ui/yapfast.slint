@@ -1288,6 +1288,8 @@ export component YapfastWindow inherits Window {
     callback reply(string);
     callback edit(string);
     callback react(string, string);
+    /// A Discord app's button on a message: its item, then its custom id.
+    callback press-button(string, string);
     // The reaction ReactionHover names, by item and key, or none.
     callback hover-reaction(string, string);
     // Open a message's Reactions window, by item, on a reaction by key, or
@@ -2899,6 +2901,7 @@ export component YapfastWindow inherits Window {
                                                         open-link(link) => { root.open-link(link); }
                                                         open-thread(room) => { root.open-aside(room); }
                                                         react(item, key) => { root.react(item, key); }
+                                                        press-button(item, id) => { root.press-button(item, id); }
                                                         retry(item) => { root.retry(item); }
                                                         cancel-send(item) => { root.cancel-send(item); }
                                                         reveal-attachment(id, index) => { root.reveal-attachment(id, index); }
@@ -3333,6 +3336,7 @@ export component YapfastWindow inherits Window {
                         reply(item) => { root.reply(item); }
                         edit(item) => { root.edit(item); }
                         react(item, key) => { root.react(item, key); }
+                        press-button(item, id) => { root.press-button(item, id); }
                         open-picker(item, x, y, width, height) => { root.anchor(x, y, width, height, false); root.open-picker(item); }
                         open-menu(message, x, y, width, height) => { root.anchor(x, y, width, height, width == 0px); root.open-menu(message); root.menu-aside = true; root.aside-composer-last = true; }
                         open-media-menu(message, index, video, x, y) => { root.anchor(x, y, 0px, 0px, true); root.open-message-menu(message, index, video); root.menu-aside = true; root.aside-composer-last = true; }

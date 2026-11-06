@@ -449,6 +449,21 @@ an error.
   connected, whenever the settings change, and clears it when it ends. A
   custom emoji in a status needs Nitro.
 
+## Apps' buttons
+
+A message's components (`components.rs`) show as cards: text, sections
+beside a thumbnail or button, galleries, files, gaps, rows of buttons and
+menus. A link button opens its page. Any other button that isn't disabled
+asks its app, as Discord's client does, with `POST /interactions`: type 3
+(a message component), the message's `application_id` (or its bot author's
+id, which is the app's for a bot), its server, channel, id and flags, this
+gateway session's id, a fresh nonce, and `{"component_type": 2,
+"custom_id": …}`. Discord answers 204 and tells the session of the outcome
+with INTERACTION_SUCCESS or INTERACTION_FAILURE; the app answers in the
+channel with a message or an edit, which arrive as any other. A failed
+request shows in the channel's error line. Menus still show without
+opening, and an app's modal (INTERACTION_MODAL_CREATE) doesn't show yet.
+
 ## GIFs
 
 The GIF button left of the emoji button, or Ctrl+G, opens a picker with two

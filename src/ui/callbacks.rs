@@ -1181,6 +1181,19 @@ pub(super) fn bind_callbacks(window: &YapfastWindow, adapter: &Rc<RefCell<Adapte
         }
     });
     let state = adapter.clone();
+    let weak = window.as_weak();
+    window.on_press_button(move |item, custom_id| {
+        if let Some(window) = weak.upgrade() {
+            state.borrow_mut().action(
+                &window,
+                Action::PressButton {
+                    item: item.into(),
+                    custom_id: custom_id.into(),
+                },
+            );
+        }
+    });
+    let state = adapter.clone();
     window.on_sidebar_resized(move |width| {
         let mut adapter = state.borrow_mut();
         adapter.layout.sidebar_width = Some(width);
@@ -1452,6 +1465,7 @@ pub(super) fn bind_callbacks(window: &YapfastWindow, adapter: &Rc<RefCell<Adapte
         let mut adapter = state.borrow_mut();
         let layout = &mut adapter.layout;
         layout.twelve_hour_clock = window.get_twelve_hour_clock();
+        yapfast_core::clock::set_twelve_hour_clock(layout.twelve_hour_clock);
         layout.clock_seconds = window.get_clock_seconds();
         layout.text_size = Some(window.get_text_size());
         layout.link_previews = Some(window.get_link_previews());

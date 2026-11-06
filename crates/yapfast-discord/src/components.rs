@@ -52,6 +52,18 @@ pub struct Card {
 }
 
 impl Card {
+    /// Its buttons, those in rows and those beside text.
+    pub fn buttons(&self) -> impl Iterator<Item = &Button> {
+        self.rows.iter().flat_map(|row| match row {
+            Row::Buttons(buttons) => buttons.as_slice(),
+            Row::Text {
+                beside: Some(Beside::Button(button)),
+                ..
+            } => std::slice::from_ref(button),
+            _ => &[],
+        })
+    }
+
     /// The Markdown of its texts, in order.
     pub fn texts(&self) -> impl Iterator<Item = &str> {
         self.rows.iter().filter_map(|row| match row {
@@ -105,6 +117,9 @@ pub struct Button {
     /// Where a link button leads.
     pub url: Option<String>,
     pub disabled: bool,
+    /// What the app named any other button, which pressing it sends.
+    #[serde(default)]
+    pub custom_id: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -300,6 +315,10 @@ fn button(component: &Value) -> Option<Button> {
             .filter(|_| style == Style::Link)
             .map(str::to_owned),
         disabled: component["disabled"].as_bool().unwrap_or(false),
+        custom_id: component["custom_id"]
+            .as_str()
+            .filter(|id| style != Style::Link && !id.is_empty())
+            .map(str::to_owned),
     })
 }
 

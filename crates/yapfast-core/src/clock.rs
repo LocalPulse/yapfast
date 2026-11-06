@@ -11,6 +11,15 @@ pub fn now_ms() -> u64 {
         })
 }
 
+/// Shows the `<t:…>` timestamps in Discord messages on a 12-hour clock from
+/// now on, or a 24-hour one, as the app's setting says.
+pub fn set_twelve_hour_clock(on: bool) {
+    #[cfg(feature = "discord")]
+    yapfast_discord::message::set_twelve_hour_clock(on);
+    #[cfg(not(feature = "discord"))]
+    let _ = on;
+}
+
 /// The clock time of a Unix time, such as `14:05`.
 pub fn time(seconds: u64) -> String {
     time_on(seconds, false)

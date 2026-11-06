@@ -1372,8 +1372,8 @@ pub enum Beside {
     Button(CardButton),
 }
 
-/// An app's button. Only a link's does anything in Yapfast: the others
-/// would ask the app, which Yapfast can't yet.
+/// An app's button: a link's opens its page, and any other asks the app,
+/// by its `custom_id`, with [`Command::PressButton`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CardButton {
     /// Its emoji, a custom one by `:name:`, then its label.
@@ -1382,6 +1382,8 @@ pub struct CardButton {
     /// Where a link button leads.
     pub url: Option<String>,
     pub disabled: bool,
+    /// What pressing it tells the app, for a button that isn't a link.
+    pub custom_id: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1659,6 +1661,13 @@ pub enum Command {
         room: String,
         item: String,
         key: String,
+    },
+    /// Press a Discord app's button on an item: the app hears of it as a
+    /// component interaction, and answers in the channel.
+    PressButton {
+        room: String,
+        item: String,
+        custom_id: String,
     },
     /// Who reacted to an item with `key`: up to `limit` of them, after the
     /// one with id `after`. [`Event::Reactors`] follows.
@@ -3197,6 +3206,7 @@ impl Command {
             Command::Send { room, .. }
             | Command::Edit { room, .. }
             | Command::React { room, .. }
+            | Command::PressButton { room, .. }
             | Command::Reactors { room, .. }
             | Command::Vote { room, .. }
             | Command::SendPoll { room, .. }

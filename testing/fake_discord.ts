@@ -129,7 +129,11 @@
 // link button, gaps and buttons. Status Bot posts in #general a message with
 // buttons and a menu under its text, and one of components outside a
 // container, with a gallery of its attachments and a file. It answers with
-// the notice's id.
+// the notice's id. Pressing one of Status Bot's buttons sends POST
+// /interactions, which answers 204 and dispatches INTERACTION_CREATE, then
+// INTERACTION_SUCCESS, or INTERACTION_FAILURE for "rollback", as Discord
+// does for an app that doesn't answer; GET /_control/interactions lists each
+// body Alice sent, oldest first.
 // POST /_control/unlooked-reply?channel=ID&to=ID makes Bob reply to a message
 // in a channel, live and in its history without `referenced_message`, as when
 // Discord didn't look the original up, and answers with the reply's id.
@@ -1674,6 +1678,9 @@ const reactorPages: string[] = [];
 const pollVotes: string[] = [];
 /** The polls Alice posted, as she sent them, as GET /_control/polls lists them. */
 const polls: unknown[] = [];
+/** Each interaction Alice created, as she sent it, as GET
+ *  /_control/interactions lists them. */
+const interactions: unknown[] = [];
 /** Each reaction a moderator removed, as GET /_control/reactor-removals lists
  *  them: the message, the emoji and the user. */
 const reactorRemovals: string[] = [];
@@ -4664,6 +4671,23 @@ async function api(req: Request, path: string, origin: string): Promise<Response
     const body: any = await req.json().catch(() => ({}));
     const urls: string[] = Array.isArray(body.urls) ? body.urls : [];
     return json(urls.map(url => ({ url, external_asset_path: `external/fixture/${url.replace("://", "/")}` })));
+  }
+  // A press of an app's button. Discord answers at once and tells the
+  // session of the outcome; "rollback" stands for an app that doesn't answer.
+  if (req.method === "POST" && path === "/interactions") {
+    const body: any = await req.json().catch(() => ({}));
+    if (body.type !== 3 || typeof body.data?.custom_id !== "string" || typeof body.application_id !== "string") {
+      return json({ message: "Invalid Form Body", code: 50035 }, 400);
+    }
+    interactions.push(body);
+    const id = snowflake(Date.now());
+    dispatch("INTERACTION_CREATE", { id, nonce: body.nonce ?? null });
+    if (body.data.custom_id === "rollback") {
+      dispatch("INTERACTION_FAILURE", { id, nonce: body.nonce ?? null, reason_code: 2 });
+    } else {
+      dispatch("INTERACTION_SUCCESS", { id, nonce: body.nonce ?? null });
+    }
+    return new Response(null, { status: 204 });
   }
   // A confirmed remote login's ticket, traded for the login without one.
   if (req.method === "POST" && path === "/users/@me/remote-auth/login") {
@@ -8273,6 +8297,9 @@ const server = Bun.serve<SocketData>({
     }
     if (req.method === "GET" && path === "/_control/polls") {
       return Response.json(polls);
+    }
+    if (req.method === "GET" && path === "/_control/interactions") {
+      return Response.json(interactions);
     }
     if (req.method === "GET" && path === "/_control/typed") {
       return Response.json(typed);

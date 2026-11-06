@@ -1339,6 +1339,11 @@ pub enum Action {
         item: String,
         key: String,
     },
+    /// Press a Discord app's button on an item, by what the app named it.
+    PressButton {
+        item: String,
+        custom_id: String,
+    },
     RequestDelete(String),
     /// Delete a message without asking first, as Shift and a click on its
     /// Delete do in Discord's client.
@@ -2629,6 +2634,7 @@ impl Application {
                 vec![]
             }
             Action::React { item, key } => self.react(item, key),
+            Action::PressButton { item, custom_id } => self.press_button(item, custom_id),
             Action::RequestDelete(item) => self.request_delete(item),
             Action::DeleteNow(item) => self.delete_now(item),
             Action::Vote { item, answers } => self.vote(item, answers),

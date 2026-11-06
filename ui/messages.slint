@@ -422,7 +422,7 @@ export struct EmbedCard {
 /// A Discord app's button. Only a link's is `enabled`: the others would ask
 /// the app, which Yapfast can't yet.
 export enum CardButtonStyle { primary, secondary, success, danger, link }
-export struct CardButton { label: string, style: CardButtonStyle, url: string, enabled: bool }
+export struct CardButton { label: string, style: CardButtonStyle, url: string, custom-id: string, enabled: bool }
 export enum CardRowKind { text, media, separator, buttons, select, unknown }
 /// A row of a Discord app's card, of one `kind`, with the fields it uses:
 /// text and what a section shows beside it; pictures in a gallery and file
@@ -1443,11 +1443,12 @@ export component EmbedView inherits HorizontalLayout {
     Rectangle { horizontal-stretch: 1; }
 }
 
-// A Discord app's button. A link's opens its page; the others show what the
-// app offers, but would ask the app, which Yapfast can't yet.
+// A Discord app's button. A link's opens its page; the others ask the app,
+// by what it named them.
 component CardButtonView inherits ActionButton {
     in property <CardButton> button;
     callback open-link(string);
+    callback press(string);
     property <image> no-icon;
     text: root.button.label;
     icon: root.button.style == CardButtonStyle.link ? @image-url("icons/external-link.svg") : root.no-icon;
@@ -1456,7 +1457,9 @@ component CardButtonView inherits ActionButton {
     danger: root.button.style == CardButtonStyle.danger;
     enabled: root.button.enabled;
     small: true;
-    clicked => { root.open-link(root.button.url); }
+    clicked => {
+        if root.button.url != "" { root.open-link(root.button.url); } else { root.press(root.button.custom-id); }
+    }
 }
 
 // A Discord message's container of components, or those outside one: text
@@ -1471,6 +1474,8 @@ export component CardView inherits HorizontalLayout {
     in property <bool> preview;
     in property <length> message-font-size;
     callback open-link(string);
+    /// A button of the message's item, by its custom id.
+    callback press-button(string, string);
     callback reveal-attachment(string, int);
     callback view-image(string, int);
     callback save-attachment(string, int);
@@ -1520,7 +1525,7 @@ export component CardView inherits HorizontalLayout {
                     }
                     if row.has-button: VerticalLayout {
                         alignment: start;
-                        CardButtonView { button: row.button; open-link(link) => { root.open-link(link); } }
+                        CardButtonView { button: row.button; open-link(link) => { root.open-link(link); } press(id) => { root.press-button(root.item, id); } }
                     }
                 }
                 if row.kind == CardRowKind.media && row.images.length > 0: MessageGallery {
@@ -1544,7 +1549,7 @@ export component CardView inherits HorizontalLayout {
                 }
                 if row.kind == CardRowKind.buttons: HorizontalLayout {
                     spacing: 8px; alignment: start;
-                    for button in row.buttons: CardButtonView { button: button; open-link(link) => { root.open-link(link); } }
+                    for button in row.buttons: CardButtonView { button: button; open-link(link) => { root.open-link(link); } press(id) => { root.press-button(root.item, id); } }
                 }
                 if row.kind == CardRowKind.select: HorizontalLayout {
                     // It doesn't open, so it shows as disabled.
@@ -2002,6 +2007,7 @@ export component MessageContent inherits VerticalLayout {
     callback open-link(string);
     callback open-thread(string);
     callback react(string, string);
+    callback press-button(string, string);
     callback retry(string);
     callback cancel-send(string);
     callback reveal-attachment(string, int);
@@ -2162,6 +2168,7 @@ export component MessageContent inherits VerticalLayout {
                 card: card; item: message.item; delivery: message.delivery; active-item: root.active-item; preview: root.preview;
                 message-font-size: root.message-font-size;
                 open-link(link) => { root.open-link(link); }
+                press-button(item, id) => { root.press-button(item, id); }
                 reveal-attachment(id, index) => { root.reveal-attachment(id, index); }
                 view-image(id, index) => { root.view-image(id, index); }
                 save-attachment(id, index) => { root.save-attachment(id, index); }

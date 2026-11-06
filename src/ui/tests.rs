@@ -6871,6 +6871,7 @@ fn a_card_of_components_shows_headings_files_and_only_link_buttons_working() {
         style,
         url: url.map(str::to_owned),
         disabled: false,
+        custom_id: None,
     };
     let message = ChatMessage {
         item: "d:1".into(),

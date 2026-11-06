@@ -70,6 +70,7 @@ export component ThreadPanel inherits Rectangle {
     callback start-forward(string);
     callback delete-now(string);
     callback react(string, string);
+    callback press-button(string, string);
     /// A message's reaction picker or menu, opening beside what was clicked.
     callback open-picker(string, length, length, length, length);
     callback open-menu(MessageRow, length, length, length, length);
@@ -234,6 +235,7 @@ export component ThreadPanel inherits Rectangle {
                                 open-link(link) => { root.open-link(link); }
                                 open-thread(room) => { root.open-thread(room); }
                                 react(item, key) => { root.react(item, key); }
+                                press-button(item, id) => { root.press-button(item, id); }
                                 retry(item) => { root.retry(item); }
                                 cancel-send(item) => { root.cancel-send(item); }
                                 reveal-attachment(id, index) => { root.reveal-attachment(id, index); }
