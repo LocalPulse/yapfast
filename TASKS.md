@@ -24,8 +24,8 @@
 | PinDMs: закреплённые ЛС по категориям + импорт из Vencord | ⏳ | Категории Pin, Work, Increase, Studio, Anime Paradise с цветами |
 | Импорт настроек плагинов из Vencord | ⏳ | Из `%APPDATA%\Vencord\settings\settings.json` |
 | Если нужно — смотреть, как это делает сам Discord (его веб-клиент) | — | Принцип работы: повторять поведение официального клиента |
-| Профиль: украшения аватара | ⏳ | `avatar_decoration_data`, CDN `avatar-decoration-presets` |
-| Профиль: бейджи | ⏳ | `badges`, CDN `badge-icons` |
+| Профиль: украшения аватара | 🔨 | Делает Kimi; | `avatar_decoration_data`, CDN `avatar-decoration-presets` |
+| Профиль: бейджи | 🔨 | Делает Kimi; | `badges`, CDN `badge-icons` |
 | Профиль: привязанные аккаунты | ⏳ | `connected_accounts` |
 | Профиль: цвета темы, эффекты профиля, тег сервера, nameplate | ⏳ | `theme_colors`, `profile_effect`, `primary_guild`, `collectibles` |
 | Профиль: тег сервера (MCS, AC, INCR…) рядом с именами в ЛС, участниках и чате | ⏳ | `primary_guild`, как на скриншоте закреплённых ЛС |
