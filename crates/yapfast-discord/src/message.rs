@@ -2550,7 +2550,9 @@ mod tests {
     fn names_learn_and_drop_avatar_decorations() {
         let mut names = Names::default();
         names.learn_user(&json!({"id": "2", "username": "ann", "avatar_decoration_data": {"asset": "a_ring", "sku_id": "1"}}));
-        assert!(names.decoration("2").is_some_and(|url| url.ends_with("/avatar-decoration-presets/a_ring.png?size=96&passthrough=false")));
+        assert!(names.decoration("2").is_some_and(|url| {
+            url.ends_with("/avatar-decoration-presets/a_ring.png?size=96&passthrough=false")
+        }));
         // A partial user leaves it be; null takes it off.
         names.learn_user(&json!({"id": "2"}));
         assert!(names.decoration("2").is_some());
