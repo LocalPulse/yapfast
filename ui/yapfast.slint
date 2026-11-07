@@ -2891,6 +2891,17 @@ export component YapfastWindow inherits Window {
                                                 y: parent.top; height: parent.height - parent.top;
                                                 changed has-hover => { if self.has-hover { root.active-item = message.item; root.active-index = index; } }
                                                 clicked => { root.active-item = message.item; root.active-index = index; }
+                                                // As Vencord's MessageClickActions: a double click edits
+                                                // one's own message and replies to anyone else's.
+                                                double-clicked => {
+                                                    if !message.deleted && message.delivery == "" && root.composer-enabled {
+                                                        if message.own && message.can-edit {
+                                                            root.edit(message.item); root.focus-composer();
+                                                        } else if message.can-reply {
+                                                            root.reply(message.item); root.focus-composer();
+                                                        }
+                                                    }
+                                                }
                                                 // A right click opens the same menu as the hover bar's More button.
                                                 pointer-event(event) => {
                                                     if event.button == PointerEventButton.right && event.kind == PointerEventKind.down

@@ -97,12 +97,24 @@ fn live_events_echoes_and_failed_sends() {
         (seven.content.as_str(), seven.reactions.len()),
         ("changed", 1)
     );
+    // As MessageLogger: an edit keeps what it said before, and a message
+    // deleted while the channel is open stays, marked.
+    let before = message("7", None).content;
+    assert_eq!(seven.edits, [before]);
     assert!(open.live(&Live::Deleted {
         channel: "11".into(),
         id: "3".into()
     }));
     let order: Vec<_> = open.shown.messages.keys().copied().collect();
-    assert_eq!(order, [5, 7]);
+    assert_eq!(order, [3, 5, 7]);
+    assert!(open.shown.messages[&3].logged_deleted);
+    assert!(
+        !open.live(&Live::Deleted {
+            channel: "11".into(),
+            id: "3".into()
+        }),
+        "deleted once"
+    );
 
     // A send that failed can be cancelled; one that arrives replaces its echo.
     for nonce in ["100", "101"] {
@@ -581,7 +593,10 @@ fn a_page_asked_for_before_a_delete_doesnt_bring_the_message_back() {
     });
     open.deleted("3");
     open.loaded(Load::Latest, shown(page(1..=4)));
-    assert!(open.shown.messages.keys().eq(&[1, 4]));
+    // As MessageLogger: theirs stays, marked deleted; this account's goes.
+    let keys: Vec<_> = open.shown.messages.keys().copied().collect();
+    assert_eq!(keys, [1, 2, 4], "the page doesn't bring back 3");
+    assert!(open.shown.messages[&2].logged_deleted);
 }
 
 #[test]

@@ -1802,7 +1802,14 @@ impl OpenChannel {
             timestamp,
             own,
             edited: message.edited,
-            deleted: false,
+            // Deleted while the channel was open: it stays, as MessageLogger
+            // keeps it.
+            deleted: message.logged_deleted,
+            previous_bodies: message
+                .edits
+                .iter()
+                .map(|before| discord.render(server, before))
+                .collect(),
             blocked: snapshot.blocked.contains(&message.author_id),
             mentions_me: message.names_me(me, marks),
             replies_to_me: message.replies_to(me),
@@ -1973,10 +1980,17 @@ fn change(messages: &mut BTreeMap<u64, Message>, channel: &str, event: &Live) ->
                 Some(poll) if !poll.counted => known.poll.take(),
                 poll => poll.clone(),
             };
+            // What it said before, as MessageLogger shows edits.
+            let mut edits = std::mem::take(&mut known.edits);
+            if message.edited && known.content != message.content && !known.content.is_empty() {
+                edits.push(std::mem::take(&mut known.content));
+            }
             *known = Message {
                 reactions,
                 poll,
                 reply,
+                edits,
+                logged_deleted: known.logged_deleted,
                 ..message.clone()
             };
             Some(message.order())
@@ -1996,8 +2010,15 @@ fn change(messages: &mut BTreeMap<u64, Message>, channel: &str, event: &Live) ->
             channel: id,
             id: message,
         } if id == channel => {
+            // It stays, marked, as MessageLogger keeps it; a page loaded
+            // later leaves it out, as Discord no longer has it.
             let order = message.parse().unwrap_or_default();
-            messages.remove(&order).map(|_| order)
+            let known = messages.get_mut(&order)?;
+            if known.logged_deleted {
+                return None;
+            }
+            known.logged_deleted = true;
+            Some(order)
         }
         Live::Reaction {
             channel: id,

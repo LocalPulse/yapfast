@@ -1544,6 +1544,9 @@ pub struct ChatMessage {
     pub own: bool,
     pub edited: bool,
     pub deleted: bool,
+    /// What it said before each edit seen, oldest first, as Vencord's
+    /// MessageLogger shows them; Discord's alone.
+    pub previous_bodies: Vec<String>,
     /// From someone this account blocked: it shows collapsed until asked for.
     pub blocked: bool,
     /// Mentions this account or a group it's in, other than as a reply to

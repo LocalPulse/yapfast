@@ -171,6 +171,14 @@ pub struct Message {
     /// Its message flags, which pressing one of its buttons sends along.
     #[serde(default)]
     pub flags: u64,
+    /// Deleted while its channel was open, and kept to show, as Vencord's
+    /// MessageLogger keeps it.
+    #[serde(default)]
+    pub logged_deleted: bool,
+    /// What it said before each edit seen while its channel was open, the
+    /// oldest first.
+    #[serde(default)]
+    pub edits: Vec<String>,
 }
 
 /// A message's poll, its votes as Discord counted them when the message
@@ -811,6 +819,8 @@ pub fn parse(value: &Value) -> Option<Message> {
             })
             .map(str::to_owned),
         flags: value["flags"].as_u64().unwrap_or_default(),
+        logged_deleted: false,
+        edits: Vec::new(),
     })
 }
 

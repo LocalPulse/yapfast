@@ -703,6 +703,8 @@ pub(super) fn message_row_within(
         time_styled: slint::StyledText::from_plain_text(&message.time),
         edited: message.edited,
         deleted: message.deleted,
+        previous_bodies: message.previous_bodies.join("\n").into(),
+        logged_deleted: message.deleted && message.item.starts_with("d:"),
         forwarded: message.forwarded,
         has_reply: message.reply.is_some(),
         reply_author: reply_author.into(),

@@ -45,8 +45,10 @@ device verification and recovery are being tested.
 
 ## Rendering on Windows
 
-Yapfast renders with Skia Software unless "Render with the GPU" in Settings →
-Advanced is on. On Windows that setting asks Slint for Skia with Direct3D
+On Windows "Render with the GPU" in Settings → Advanced is on by default, and
+a layout from before that turns it on once: Skia Software scrolled a server's
+channels at 40–50 frames a second on a 1440p display at 164 Hz. The setting
+asks Slint for Skia with Direct3D
 required, which draws through wgpu's Direct3D 12; Linux uses OpenGL. NVIDIA's
 OpenGL driver on Windows kept about one core busy while it waited for the
 screen, which is why Windows doesn't. If the GPU can't start, Yapfast restarts

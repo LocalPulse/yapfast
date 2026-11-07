@@ -1108,6 +1108,9 @@ struct Layout {
     each_sound: std::collections::BTreeMap<Sound, u8>,
     /// Yapfast draws with Skia GPU from its next start; see [`graphics`].
     gpu_rendering: bool,
+    /// The GPU became the default on Windows after this layout was written:
+    /// it was turned on once, as for a new layout. See [`graphics`].
+    gpu_by_default: bool,
     /// Screen sharing encodes on the GPU where it has an encoder; on unless
     /// turned off.
     gpu_encoding: Option<bool>,
@@ -1240,6 +1243,14 @@ impl Layout {
             layout.each_sound.insert(Sound::Mention, 0);
         }
         theme::tidy(&mut layout.custom_themes);
+        // On Windows the GPU draws by default: at a high refresh rate and
+        // resolution, Skia Software couldn't keep up with scrolling. A
+        // layout from before that turns it on once; turned off afterwards,
+        // it stays off.
+        if !layout.gpu_by_default {
+            layout.gpu_by_default = true;
+            layout.gpu_rendering |= graphics::GPU_BY_DEFAULT;
+        }
         layout
     }
 

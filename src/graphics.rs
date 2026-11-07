@@ -1,14 +1,19 @@
 //! Renderer choice at startup and recovery from a failed GPU start.
 //!
-//! Yapfast renders with Skia Software. In a ten-person call it used about half the
-//! memory of Skia GPU at the same CPU, and scrolling a long history at 2× scale
-//! cost less CPU too. The GPU is a setting, which `--renderer` overrides for one
-//! start; if the GPU fails, Yapfast restarts itself with Skia Software, says why and
-//! turns the setting off. Slint picks one renderer per process and never unloads
+//! On Linux Yapfast renders with Skia Software. In a ten-person call it used about
+//! half the memory of Skia GPU at the same CPU, and scrolling a long history at 2×
+//! scale cost less CPU too. On Windows Skia GPU is the default: on a 1440p
+//! display at 164 Hz, Skia Software scrolled a server's channels at 40–50 frames
+//! a second. The GPU is a setting, which `--renderer` overrides for one start; if
+//! the GPU fails, Yapfast restarts itself with Skia Software, says why and turns
+//! the setting off. Slint picks one renderer per process and never unloads
 //! the graphics driver, so a changed setting applies when Yapfast restarts.
 //!
 //! Skia GPU draws through OpenGL on Linux and through Direct3D 12 on Windows.
 //! There, NVIDIA's OpenGL driver kept a core busy while Yapfast drew with it.
+
+/// Skia GPU draws unless the setting is turned off: on Windows.
+pub const GPU_BY_DEFAULT: bool = cfg!(windows);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Renderer {

@@ -631,7 +631,9 @@ impl Adapter {
             &spam,
             self.layout.twelve_hour_clock,
         );
-        window.set_requests_badge(count_badge(requests.incoming.len() as u64));
+        // As Vencord's NoPendingCount: friend requests waiting show without
+        // a count; the Requests page still lists them.
+        window.set_requests_badge(SharedString::default());
         update_model(&self.models.requests_incoming, requests.incoming);
         update_model(&self.models.requests_sent, requests.sent);
         update_model(&self.models.requests_spam, requests.spam);

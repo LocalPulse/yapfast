@@ -627,6 +627,12 @@ export struct MessageRow {
     /// through all three. A body of nothing but emoji shows them large.
     jumbo: bool,
     styled: styled-text, author-styled: styled-text, time-styled: styled-text, edited: bool, deleted: bool,
+    /// What it said before each edit seen, oldest first, a line each, as
+    /// Vencord's MessageLogger shows them; empty for none.
+    previous-bodies: string,
+    /// Deleted on Discord while the channel was open, and kept, as
+    /// MessageLogger keeps it.
+    logged-deleted: bool,
     /// A notice in place of a message, such as Discord's that someone pinned
     /// one, by the icon it shows in place of the avatar: "pin", "join",
     /// "thread", "call" or "poll"; empty for a message. Its text has its
@@ -2136,6 +2142,12 @@ export component MessageContent inherits VerticalLayout {
                 Image { source: @image-url("icons/forward.svg"); width: 16px; image-fit: contain; colorize: Theme.muted; }
                 Text { text: "Forwarded"; color: Theme.muted; font-size: 14px; font-italic: true; vertical-alignment: center; }
             }
+            // Earlier texts of an edited message, faint and slanted above it.
+            if message.previous-bodies != "": Text {
+                text: message.previous-bodies; color: Theme.faint; font-size: root.message-font-size - 1px;
+                font-italic: true; wrap: word-wrap;
+                accessible-label: "Before the edit: " + message.previous-bodies;
+            }
             if message.body != "" && message.blocks.length == 0: StyledText {
                 // An overlong word breaks, as in Discord's client, rather than widening the row.
                 min-width: 0px;
@@ -2156,6 +2168,7 @@ export component MessageContent inherits VerticalLayout {
                 }
             }
             if message.edited && !message.deleted: Text { text: "(edited)"; color: Theme.muted; font-size: 12px; }
+            if message.logged-deleted: Text { text: "(deleted)"; color: Theme.danger; font-size: 12px; font-weight: 600; }
             // Fixed-size children sit beside a spacer, so they do not cap the column's width.
             if message.images.length > 0: MessageGallery {
                 images: message.images; gallery-width: message.gallery-width; gallery-height: message.gallery-height;
