@@ -40,12 +40,12 @@ fn tools() -> Value {
         },
         {
             "name": "list_channels",
-            "description": "A server's channels: id, name, type (0 text, 2 voice, 4 category, 5 announcement, 13 stage, 15 forum), parent category and topic.",
+            "description": "A server's channels in Discord's order, each under its category: id, name, type (0 text, 2 voice, 4 category, 5 announcement, 13 stage, 15 forum), category and topic.",
             "inputSchema": {"type": "object", "properties": {"server_id": string("The server's id.")}, "required": ["server_id"]},
         },
         {
             "name": "list_dms",
-            "description": "The account's DMs and group DMs: channel id, the people in each, and the last message's id.",
+            "description": "The account's DMs and group DMs, the one talked in last first: channel id, name, the people in each, and the last message's id.",
             "inputSchema": {"type": "object", "properties": {}},
         },
         {
@@ -225,27 +225,25 @@ async fn call(api: &Api, name: &str, arguments: &Value) -> Result<Value> {
             let channels = api
                 .raw("GET", &format!("/guilds/{server}/channels"), None)
                 .await?;
-            let mut channels: Vec<Value> = channels
-                .as_array()
-                .into_iter()
-                .flatten()
-                .map(|channel| {
-                    json!({
-                        "id": channel["id"], "name": channel["name"], "type": channel["type"],
-                        "parent_id": channel["parent_id"], "position": channel["position"], "topic": channel["topic"],
-                    })
-                })
-                .collect();
-            channels.sort_by_key(|channel| channel["position"].as_i64().unwrap_or_default());
-            Value::Array(channels)
+            Value::Array(in_discords_order(
+                channels.as_array().map_or(&[][..], Vec::as_slice),
+            ))
         }
         "list_dms" => {
             let channels = api.raw("GET", "/users/@me/channels", None).await?;
+            let mut channels: Vec<&Value> = channels.as_array().into_iter().flatten().collect();
+            // The one talked in last first, as Discord's DM list.
+            channels.sort_by_key(|channel| {
+                std::cmp::Reverse(
+                    channel["last_message_id"]
+                        .as_str()
+                        .and_then(|id| id.parse::<u64>().ok())
+                        .unwrap_or_default(),
+                )
+            });
             Value::Array(
                 channels
-                    .as_array()
                     .into_iter()
-                    .flatten()
                     .map(|channel| {
                         let people: Vec<Value> = channel["recipients"]
                             .as_array()
@@ -297,10 +295,13 @@ async fn call(api: &Api, name: &str, arguments: &Value) -> Result<Value> {
             send(api, channel, arguments).await?
         }
         "get_profile" => {
-            let user = text(arguments, "user_id")?;
-            if user != "@me" {
-                snowflake(arguments, "user_id")?;
-            }
+            let user = match text(arguments, "user_id")? {
+                "@me" => api.raw("GET", "/users/@me", None).await?["id"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Discord didn't say who the account is"))?
+                    .to_owned(),
+                _ => snowflake(arguments, "user_id")?.to_owned(),
+            };
             let mut path = format!("/users/{user}/profile?with_mutual_guilds=true");
             if arguments["server_id"].is_string() {
                 path.push_str(&format!("&guild_id={}", snowflake(arguments, "server_id")?));
@@ -386,6 +387,9 @@ async fn call(api: &Api, name: &str, arguments: &Value) -> Result<Value> {
         }
         "discord_request" => {
             let method = text(arguments, "method")?;
+            if !["GET", "POST", "PUT", "PATCH", "DELETE"].contains(&method) {
+                bail!("`method` must be GET, POST, PUT, PATCH or DELETE");
+            }
             let mut path = text(arguments, "path")?.to_owned();
             if !path.starts_with('/') || path.contains("://") || path.contains("..") {
                 bail!("`path` must be a path under /api/v9, starting with /");
@@ -412,6 +416,58 @@ async fn call(api: &Api, name: &str, arguments: &Value) -> Result<Value> {
         }
         other => bail!("no tool called {other}"),
     })
+}
+
+/// A server's channels as Discord lists them: those in no category first,
+/// then each category by its position with its channels; within each, text
+/// channels (and forums and announcements) before voice and stage
+/// channels, each by position. Each channel names its category.
+fn in_discords_order(channels: &[Value]) -> Vec<Value> {
+    const CATEGORY: u64 = 4;
+    let voice = |channel: &Value| matches!(channel["type"].as_u64(), Some(2 | 13));
+    let position = |channel: &Value| channel["position"].as_i64().unwrap_or_default();
+    let id = |channel: &Value| {
+        channel["id"]
+            .as_str()
+            .and_then(|id| id.parse::<u64>().ok())
+            .unwrap_or_default()
+    };
+    let mut categories: Vec<&Value> = channels
+        .iter()
+        .filter(|channel| channel["type"].as_u64() == Some(CATEGORY))
+        .collect();
+    categories.sort_by_key(|category| (position(category), id(category)));
+    let row = |channel: &Value, category: Option<&Value>| {
+        json!({
+            "id": channel["id"], "name": channel["name"], "type": channel["type"],
+            "category": category.map(|category| category["name"].clone()),
+            "topic": channel["topic"],
+        })
+    };
+    let under = |parent: Option<&str>| {
+        let mut children: Vec<&Value> = channels
+            .iter()
+            .filter(|channel| {
+                channel["type"].as_u64() != Some(CATEGORY)
+                    && channel["parent_id"].as_str() == parent
+            })
+            .collect();
+        children.sort_by_key(|channel| (voice(channel), position(channel), id(channel)));
+        children
+    };
+    let mut ordered: Vec<Value> = under(None)
+        .into_iter()
+        .map(|channel| row(channel, None))
+        .collect();
+    for category in categories {
+        ordered.push(row(category, None));
+        ordered.extend(
+            under(category["id"].as_str())
+                .into_iter()
+                .map(|channel| row(channel, Some(category))),
+        );
+    }
+    ordered
 }
 
 async fn send(api: &Api, channel: &str, arguments: &Value) -> Result<Value> {
@@ -551,6 +607,23 @@ mod tests {
         assert!(snowflake(&json!({"id": "12/../3"}), "id").is_err());
         assert!(snowflake(&json!({}), "id").is_err());
         assert_eq!(urlencoding("a b&c"), "a%20b%26c");
+    }
+
+    #[test]
+    fn channels_come_in_discords_order() {
+        let channels = json!([
+            {"id": "5", "name": "voice", "type": 2, "parent_id": "1", "position": 0},
+            {"id": "4", "name": "chat", "type": 0, "parent_id": "1", "position": 1},
+            {"id": "1", "name": "Talk", "type": 4, "position": 1},
+            {"id": "2", "name": "Info", "type": 4, "position": 0},
+            {"id": "3", "name": "rules", "type": 0, "parent_id": "2", "position": 0},
+            {"id": "6", "name": "lobby", "type": 0, "position": 5},
+        ]);
+        let names: Vec<_> = in_discords_order(channels.as_array().unwrap())
+            .iter()
+            .map(|channel| channel["name"].as_str().unwrap().to_owned())
+            .collect();
+        assert_eq!(names, ["lobby", "Info", "rules", "Talk", "chat", "voice"]);
     }
 
     #[tokio::test]
