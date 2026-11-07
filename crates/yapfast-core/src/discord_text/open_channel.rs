@@ -961,15 +961,16 @@ impl OpenChannel {
         });
     }
 
-    /// Presses the button of `item` that the app named `custom_id`, as a
-    /// component interaction; the app answers in the channel, or Discord
-    /// says it failed.
+    /// Presses the button of `item` that the app named `custom_id`, or with
+    /// `values` picks them from its menu, as a component interaction; the
+    /// app answers in the channel, or Discord says it failed.
     pub fn press_button(
         &self,
         discord: &Discord,
         done: &UnboundedSender<Done>,
         item: &str,
         custom_id: String,
+        values: Option<Vec<String>>,
     ) {
         let Some(message) =
             sent_id(item).and_then(|id| self.message(id.parse().unwrap_or_default()))
@@ -979,21 +980,33 @@ impl OpenChannel {
         let Some(application) = message.application_id.clone() else {
             return;
         };
-        let pressable = message
-            .components
-            .iter()
-            .flat_map(|card| card.buttons())
-            .any(|button| !button.disabled && button.custom_id.as_deref() == Some(&custom_id));
-        if !pressable {
+        let component_type = match &values {
+            None => message
+                .components
+                .iter()
+                .flat_map(|card| card.buttons())
+                .any(|button| !button.disabled && button.custom_id.as_deref() == Some(&custom_id))
+                .then_some(2),
+            Some(values) => message
+                .components
+                .iter()
+                .flat_map(|card| card.menus())
+                .find(|(menu, disabled)| !disabled && menu.custom_id == custom_id)
+                .filter(|(menu, _)| menu.allows(values))
+                .map(|(menu, _)| menu.kind),
+        };
+        let Some(component_type) = component_type else {
             return;
-        }
+        };
         let press = yapfast_discord::service::Press {
             guild: (self.guild != crate::discord::DM_GUILD).then(|| self.guild.clone()),
             channel: self.channel.clone(),
             message: message.id.clone(),
             message_flags: message.flags,
             application,
+            component_type,
             custom_id,
+            values,
         };
         let (discord, done, room) = (discord.clone(), done.clone(), self.room.clone());
         tokio::spawn(async move {

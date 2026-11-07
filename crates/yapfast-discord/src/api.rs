@@ -826,27 +826,14 @@ impl Api {
             .await
     }
 
-    /// Presses an app's button, as a component interaction (type 3) of
-    /// POST /interactions. Discord answers 204 and tells `session` of the
-    /// outcome with INTERACTION_SUCCESS or INTERACTION_FAILURE; the app
-    /// answers in the channel, or with a modal.
-    pub async fn press_button(&self, press: &crate::service::Press, session: &str) -> Result<()> {
-        let body = json!({
-            "type": 3,
-            "nonce": crate::message::nonce(),
-            "guild_id": press.guild,
-            "channel_id": press.channel,
-            "message_flags": press.message_flags,
-            "message_id": press.message,
-            "application_id": press.application,
-            "session_id": session,
-            "data": {"component_type": 2, "custom_id": press.custom_id},
-        });
-        self.empty(with_json(
-            self.request(Method::POST, "/interactions"),
-            &body,
-        ))
-        .await
+    /// Creates an interaction with POST /interactions: a press of an app's
+    /// button or a pick from its menu (type 3), or the answer to its modal
+    /// (type 5). Discord answers 204 and tells the session the body names
+    /// of the outcome with INTERACTION_SUCCESS or INTERACTION_FAILURE; the
+    /// app answers in the channel, or with a modal.
+    pub async fn interact(&self, body: &Value) -> Result<()> {
+        self.empty(with_json(self.request(Method::POST, "/interactions"), body))
+            .await
     }
 
     /// Closes this account's poll now. Discord sends the message again,

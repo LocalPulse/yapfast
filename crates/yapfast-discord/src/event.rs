@@ -66,6 +66,10 @@ events! {
     GuildMembersChunk = "GUILD_MEMBERS_CHUNK",
     /// Discord refused a gateway command for being sent too often.
     RateLimited = "RATE_LIMITED",
+    /// An app answered an interaction of this session's with a modal.
+    InteractionModalCreate = "INTERACTION_MODAL_CREATE",
+    /// An app didn't take an interaction of this session's in time.
+    InteractionFailure = "INTERACTION_FAILURE",
     /// The member list of a channel Yapfast subscribed to.
     GuildMemberListUpdate = "GUILD_MEMBER_LIST_UPDATE",
     /// Someone was banned from a server, or unbanned.
@@ -170,6 +174,8 @@ mod tests {
             ("GUILD_MEMBER_UPDATE", Event::GuildMemberUpdate),
             ("GUILD_MEMBER_REMOVE", Event::GuildMemberRemove),
             ("GUILD_MEMBERS_CHUNK", Event::GuildMembersChunk),
+            ("INTERACTION_MODAL_CREATE", Event::InteractionModalCreate),
+            ("INTERACTION_FAILURE", Event::InteractionFailure),
             ("GUILD_MEMBER_LIST_UPDATE", Event::GuildMemberListUpdate),
             ("GUILD_BAN_ADD", Event::GuildBanAdd),
             ("GUILD_BAN_REMOVE", Event::GuildBanRemove),

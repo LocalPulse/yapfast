@@ -1,0 +1,231 @@
+import { ScrollView } from "scrollview.slint";
+import { Theme, Middle, Popup } from "theme.slint";
+import { ActionButton, IconButton, TextField } from "controls.slint";
+
+// A field of a Discord app's form, as the window shows it.
+export enum ModalFieldKind { text, paragraph, select, note }
+
+export struct ModalOptionRow { label: string, value: string, description: string, picked: bool }
+
+export struct ModalFieldRow {
+    kind: ModalFieldKind,
+    label: string, description: string, placeholder: string,
+    /// What's typed so far; for a note, its text.
+    value: string,
+    /// How many characters `value` has, which Slint can't count.
+    length: int,
+    /// Why it can't go yet; empty when it can.
+    problem: string,
+    required: bool,
+    /// A text input's limit; shown when it's below Discord's 4000.
+    max-length: int,
+    /// A menu's options, and whether it takes more than one.
+    options: [ModalOptionRow],
+    multi: bool,
+}
+
+// A form a Discord app opened in answer to a press: its fields under their
+// labels, then Cancel and Submit, as Discord's client lays it out.
+export component AppModalDialog inherits Rectangle {
+    in property <string> title;
+    in property <[ModalFieldRow]> fields;
+    in property <bool> can-submit;
+    in property <bool> sending;
+    /// Why sending failed.
+    in property <string> problem;
+    callback text-edited(int, string);
+    callback pick(int, string);
+    callback submit;
+    callback close;
+    /// How far it's open, from 0 to 1; see PopupMotion.
+    in property <float> motion: 1;
+    /// Submit was pressed once: each field's problem shows from then on.
+    property <bool> tried;
+    background: rgba(0, 0, 0, 0.6 * root.motion);
+    TouchArea { clicked => { root.close(); } }
+    Rectangle {
+        opacity: Popup.opacity(root.motion); transform-scale: Popup.scale(root.motion);
+        width: min(480px, root.width - 48px);
+        height: min(root.height - 48px, head.preferred-height + form.preferred-height + foot.preferred-height + 40px);
+        background: Theme.raised; border-color: Theme.edge; border-width: 1px; border-radius: 12px;
+        drop-shadow-blur: 32px; drop-shadow-color: #00000066; drop-shadow-offset-y: 12px;
+        accessible-role: groupbox;
+        accessible-label: root.title;
+        TouchArea { }
+        FocusScope {
+            key-pressed(event) => {
+                if event.text == Key.Escape { root.close(); return accept; }
+                return reject;
+            }
+            VerticalLayout {
+                padding: 20px; spacing: 0px;
+                head := HorizontalLayout {
+                    padding-bottom: 12px;
+                    Text { text: root.title; color: Theme.text; font-size: 18px; font-weight: 700; vertical-alignment: center; horizontal-stretch: 1; wrap: word-wrap; }
+                    IconButton { icon: @image-url("icons/x.svg"); label: "Close"; size: 28px; glyph: 18px; clicked => { root.close(); } }
+                }
+                ScrollView {
+                    vertical-stretch: 1;
+                    form := VerticalLayout {
+                        spacing: 16px; alignment: start;
+                        for field[index] in root.fields: VerticalLayout {
+                            spacing: 6px;
+                            if field.kind == ModalFieldKind.note: Text {
+                                text: field.value; color: Theme.secondary; font-size: 15px; wrap: word-wrap;
+                            }
+                            if field.kind != ModalFieldKind.note && field.label != "": HorizontalLayout {
+                                spacing: 2px;
+                                Text { text: field.label; color: Theme.text; font-size: 15px; font-weight: 600; wrap: word-wrap; }
+                                if field.required: Text { text: "*"; color: Theme.danger; font-size: 15px; font-weight: 600; }
+                                Rectangle { horizontal-stretch: 1; }
+                            }
+                            if field.description != "": Text {
+                                text: field.description; color: Theme.muted; font-size: 13px; wrap: word-wrap;
+                            }
+                            if field.kind == ModalFieldKind.text: TextField {
+                                init => { if index == 0 { self.focus-input(); } }
+                                min-height: 40px; text-size: 15px; pad: 10px; fill: Theme.sunken;
+                                placeholder: field.placeholder; label: field.label; text: field.value;
+                                edited(text) => { root.text-edited(index, text); }
+                            }
+                            if field.kind == ModalFieldKind.paragraph: Rectangle {
+                                height: 110px; border-radius: 6px; background: Theme.sunken;
+                                border-width: area.has-focus ? 1px : 0px; border-color: Theme.accent.with-alpha(0.8);
+                                Text {
+                                    x: 10px; y: 9px; width: parent.width - 20px;
+                                    visible: field.value == "";
+                                    text: field.placeholder; color: Theme.muted; font-size: 15px;
+                                    wrap: word-wrap; overflow: elide;
+                                }
+                                area := TextInput {
+                                    x: 10px; y: 9px; width: parent.width - 20px; height: parent.height - 18px;
+                                    text: field.value;
+                                    single-line: false; wrap: word-wrap;
+                                    font-size: 15px; color: Theme.text;
+                                    selection-background-color: Theme.accent.with-alpha(0.35);
+                                    selection-foreground-color: Theme.text;
+                                    accessible-label: field.label;
+                                    edited => { root.text-edited(index, self.text); }
+                                }
+                            }
+                            if (field.kind == ModalFieldKind.text || field.kind == ModalFieldKind.paragraph) && field.max-length < 4000: Text {
+                                horizontal-alignment: right;
+                                text: field.length + " / " + field.max-length;
+                                color: field.length > field.max-length ? Theme.danger : Theme.muted; font-size: 12px;
+                            }
+                            if field.kind == ModalFieldKind.select: VerticalLayout {
+                                spacing: 4px;
+                                for option in field.options: Rectangle {
+                                    height: max(40px, option-text.preferred-height + 16px); border-radius: 6px;
+                                    background: option.picked ? Theme.accent.with-alpha(0.18) : option-touch.has-hover ? Theme.hover : Theme.sunken;
+                                    border-width: option.picked ? 1px : 0px; border-color: Theme.accent.with-alpha(0.7);
+                                    accessible-role: checkbox;
+                                    accessible-checked: option.picked;
+                                    accessible-label: option.label;
+                                    accessible-action-default => { root.pick(index, option.value); }
+                                    HorizontalLayout {
+                                        padding-left: 12px; padding-right: 12px; spacing: 10px;
+                                        option-text := VerticalLayout {
+                                            alignment: center; horizontal-stretch: 1;
+                                            Text { text: option.label; color: Theme.text; font-size: 15px; wrap: word-wrap; }
+                                            if option.description != "": Text { text: option.description; color: Theme.muted; font-size: 13px; wrap: word-wrap; }
+                                        }
+                                        if option.picked: Middle {
+                                            Image { source: @image-url("icons/check.svg"); width: 18px; colorize: Theme.accent; }
+                                        }
+                                    }
+                                    option-touch := TouchArea {
+                                        mouse-cursor: MouseCursor.pointer;
+                                        clicked => { root.pick(index, option.value); }
+                                    }
+                                }
+                            }
+                            if root.tried && field.problem != "": Text {
+                                text: field.problem; color: Theme.danger; font-size: 13px; wrap: word-wrap;
+                            }
+                        }
+                    }
+                }
+                foot := VerticalLayout {
+                    spacing: 8px; padding-top: 12px;
+                    if root.problem != "": Text { text: root.problem; color: Theme.danger; font-size: 14px; wrap: word-wrap; }
+                    HorizontalLayout {
+                        alignment: end; spacing: 8px;
+                        ActionButton { text: "Cancel"; ghost: true; clicked => { root.close(); } }
+                        ActionButton {
+                            text: root.sending ? "Submitting..." : "Submit"; primary: true; enabled: !root.sending;
+                            clicked => {
+                                root.tried = true;
+                                if root.can-submit { root.submit(); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// The options of a Discord app's menu on a message, opened from it: picking
+// one sends it; a menu of several picks them, then sends them with Done.
+export component AppMenuPopup inherits Rectangle {
+    in property <[ModalOptionRow]> options;
+    in property <bool> multi;
+    /// How many it takes at most, and at least, for Done.
+    in property <int> max-values: 1;
+    in property <int> min-values: 1;
+    /// Those picked so far, for a menu of several.
+    in property <int> picked-count;
+    callback pick(string);
+    callback done;
+    callback close;
+    background: Theme.raised; border-color: Theme.edge; border-width: 1px; border-radius: 8px;
+    drop-shadow-blur: 24px; drop-shadow-color: #00000066; drop-shadow-offset-y: 8px;
+    accessible-role: list;
+    FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape { root.close(); return accept; }
+            return reject;
+        }
+        VerticalLayout {
+            padding: 6px; spacing: 2px;
+            ScrollView {
+                vertical-stretch: 1;
+                VerticalLayout {
+                    spacing: 2px; alignment: start;
+                    for option in root.options: Rectangle {
+                        height: max(36px, menu-text.preferred-height + 12px); border-radius: 4px;
+                        background: menu-touch.has-hover ? Theme.hover : option.picked ? Theme.accent.with-alpha(0.15) : transparent;
+                        accessible-role: checkbox;
+                        accessible-checked: option.picked;
+                        accessible-label: option.label;
+                        accessible-action-default => { root.pick(option.value); }
+                        HorizontalLayout {
+                            padding-left: 10px; padding-right: 10px; spacing: 8px;
+                            menu-text := VerticalLayout {
+                                alignment: center; horizontal-stretch: 1;
+                                Text { text: option.label; color: Theme.text; font-size: 15px; wrap: word-wrap; }
+                                if option.description != "": Text { text: option.description; color: Theme.muted; font-size: 13px; wrap: word-wrap; }
+                            }
+                            if option.picked: Middle {
+                                Image { source: @image-url("icons/check.svg"); width: 18px; colorize: Theme.accent; }
+                            }
+                        }
+                        menu-touch := TouchArea {
+                            mouse-cursor: MouseCursor.pointer;
+                            clicked => { root.pick(option.value); }
+                        }
+                    }
+                }
+            }
+            if root.multi: HorizontalLayout {
+                padding: 4px; alignment: end;
+                ActionButton {
+                    text: "Done"; primary: true; small: true;
+                    enabled: root.picked-count >= root.min-values && root.picked-count <= root.max-values;
+                    clicked => { root.done(); }
+                }
+            }
+        }
+    }
+}
