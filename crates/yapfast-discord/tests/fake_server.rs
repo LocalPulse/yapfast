@@ -2513,7 +2513,47 @@ async fn shows_profiles() {
     assert_eq!(in_server.mutual_servers[0].id, guild);
     assert_eq!(in_server.mutual_friends.len(), 1);
     assert_eq!(in_server.mutual_friends[0].name, "Carol");
+    assert!(
+        in_server
+            .avatar_decoration
+            .as_deref()
+            .is_some_and(|url| url.contains("/avatar-decoration-presets/a_bob-decoration.png"))
+    );
+    assert_eq!(in_server.badges.len(), 2);
+    assert_eq!(in_server.badges[0].description, "Subscriber since 2020");
+    assert_eq!(
+        in_server.badges[0].link.as_deref(),
+        Some("https://discord.com/nitro")
+    );
+    assert!(
+        in_server.badges[1]
+            .icon
+            .contains("/badge-icons/bob-server.png")
+    );
+    assert_eq!(in_server.connections.len(), 1);
+    assert_eq!(in_server.connections[0].kind, "github");
+    assert_eq!(in_server.connections[0].name, "bob-dev");
+    assert!(in_server.connections[0].verified);
+    assert_eq!(in_server.theme, Some((0x151823, 0x5865f2)));
+    assert_eq!(
+        in_server.server_tag.as_ref().map(|tag| tag.tag.as_str()),
+        Some("BASS")
+    );
+    assert!(
+        in_server
+            .nameplate
+            .as_deref()
+            .is_some_and(|url| url.contains("/assets/collectibles/bob-plate/static.png"))
+    );
+    assert_eq!(in_server.effects.len(), 1);
+    assert_eq!(in_server.effects[0].width, 450);
+    assert!(
+        in_server.effects[0]
+            .image
+            .contains("/assets/collectibles/bob-effect.png")
+    );
     let own = discord.profile(PRIVATE, &bob, |_| {}).await.unwrap();
+    assert_eq!(own.badges.len(), 1);
     assert!(own.bio.is_some_and(|bio| bio.starts_with("Plays bass")));
     assert!(own.roles.is_empty() && own.joined.is_none());
 }

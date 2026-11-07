@@ -2250,6 +2250,19 @@ impl Adapter {
                 avatar: avatar
                     .map(str::to_owned)
                     .or_else(|| fallback.and_then(|fallback| fallback.avatar.clone())),
+                avatar_decoration: fallback.and_then(|fallback| fallback.avatar_decoration.clone()),
+                badges: fallback
+                    .map(|fallback| fallback.badges.clone())
+                    .unwrap_or_default(),
+                connections: fallback
+                    .map(|fallback| fallback.connections.clone())
+                    .unwrap_or_default(),
+                theme: fallback.and_then(|fallback| fallback.theme),
+                server_tag: fallback.and_then(|fallback| fallback.server_tag.clone()),
+                nameplate: fallback.and_then(|fallback| fallback.nameplate.clone()),
+                effects: fallback
+                    .map(|fallback| fallback.effects.clone())
+                    .unwrap_or_default(),
                 banner: banner
                     .map(str::to_owned)
                     .or_else(|| fallback.and_then(|fallback| fallback.banner.clone())),

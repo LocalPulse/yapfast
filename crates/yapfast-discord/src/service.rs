@@ -1340,8 +1340,15 @@ impl Discord {
         if learned {
             let _ = self.live.send(Live::Names);
         }
-        let profile = profile::parse(&value, server(guild))
+        let product = match profile::effect_id(&value, server(guild)) {
+            Some(sku) => self.api.collectible_product(sku).await.ok(),
+            None => None,
+        };
+        let mut profile = profile::parse(&value, server(guild))
             .ok_or_else(|| anyhow!("could not understand Discord's answer"))?;
+        if let Some(product) = product {
+            profile.effects = profile::parse_effect(&product);
+        }
         {
             let mut profiles = self.lock_profiles();
             profiles.retain(|old| !same(&old));

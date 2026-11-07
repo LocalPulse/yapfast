@@ -16,6 +16,20 @@ pub struct Profile {
     pub username: String,
     /// The address of their avatar: the server's, else their own.
     pub avatar: String,
+    /// The address of the decoration drawn over their avatar.
+    pub avatar_decoration: Option<String>,
+    /// Their Discord and server badges, in Discord's order.
+    pub badges: Vec<Badge>,
+    /// Their public connected accounts.
+    pub connections: Vec<ConnectedAccount>,
+    /// Their profile's background and accent colours.
+    pub theme: Option<(u32, u32)>,
+    /// Their server tag and its badge.
+    pub server_tag: Option<ServerTag>,
+    /// The static nameplate shown behind their name.
+    pub nameplate: Option<String>,
+    /// Layers of their profile effect, in drawing order.
+    pub effects: Vec<EffectLayer>,
     /// The address of their banner: the server's, else their own.
     pub banner: Option<String>,
     /// The banner's colour when they have no banner picture.
@@ -33,6 +47,44 @@ pub struct Profile {
     pub mutual_servers: Vec<MutualServer>,
     /// The friends this account shares with them.
     pub mutual_friends: Vec<MutualFriend>,
+}
+
+/// A Discord or server badge on someone's profile.
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Badge {
+    pub id: String,
+    pub description: String,
+    /// The address of its icon.
+    pub icon: String,
+    /// What clicking it opens, when Discord gives a link.
+    pub link: Option<String>,
+}
+
+/// A public account connected to someone's Discord profile.
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ConnectedAccount {
+    /// Discord's connection type, such as `github` or `spotify`.
+    pub kind: String,
+    pub name: String,
+    pub verified: bool,
+}
+
+/// A server tag shown beside someone's username.
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ServerTag {
+    pub tag: String,
+    pub badge: String,
+}
+
+/// One image layer of a profile effect.
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct EffectLayer {
+    pub image: String,
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+    pub z_index: i32,
 }
 
 /// A server this account shares with someone.
@@ -134,6 +186,42 @@ fn text(value: &Value) -> Option<&str> {
     value.as_str().filter(|text| !text.trim().is_empty())
 }
 
+fn theme(value: &Value) -> Option<(u32, u32)> {
+    let colors = value.as_array()?;
+    Some((color(&colors[0])?, color(&colors[1])?))
+}
+
+/// The selected profile effect's collectible SKU, with the server's one winning.
+pub fn effect_id<'a>(value: &'a Value, guild: Option<&str>) -> Option<&'a str> {
+    let server = guild.map(|_| &value["guild_member_profile"]["profile_effect"]["id"]);
+    server
+        .and_then(|id| text(id))
+        .or_else(|| text(&value["user_profile"]["profile_effect"]["id"]))
+}
+
+/// The layers of a collectible product's profile effect.
+pub fn parse_effect(product: &Value) -> Vec<EffectLayer> {
+    let mut layers: Vec<EffectLayer> = product["items"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|item| item["type"].as_i64() == Some(1))
+        .flat_map(|item| item["effects"].as_array().into_iter().flatten())
+        .filter_map(|effect| {
+            Some(EffectLayer {
+                image: text(&effect["src"])?.to_owned(),
+                x: effect["position"]["x"].as_i64().unwrap_or(0) as i32,
+                y: effect["position"]["y"].as_i64().unwrap_or(0) as i32,
+                width: effect["width"].as_i64().unwrap_or(0) as i32,
+                height: effect["height"].as_i64().unwrap_or(0) as i32,
+                z_index: effect["zIndex"].as_i64().unwrap_or(0) as i32,
+            })
+        })
+        .collect();
+    layers.sort_by_key(|layer| layer.z_index);
+    layers
+}
+
 /// A profile from the profile endpoint's answer. The server's profile, asked
 /// for with `guild`, wins over the person's own where they set one.
 pub fn parse(value: &Value, guild: Option<&str>) -> Option<Profile> {
@@ -162,6 +250,63 @@ pub fn parse(value: &Value, guild: Option<&str>) -> Option<Profile> {
         name,
         username: user["username"].as_str().unwrap_or_default().to_owned(),
         avatar,
+        avatar_decoration: text(&user["avatar_decoration_data"]["asset"]).map(|asset| {
+            format!(
+                "{}/avatar-decoration-presets/{asset}.png?size=160&passthrough=true",
+                ready::cdn()
+            )
+        }),
+        badges: value["badges"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .chain(value["guild_badges"].as_array().into_iter().flatten())
+            .filter_map(|badge| {
+                let icon = text(&badge["icon"])?;
+                Some(Badge {
+                    id: badge["id"].as_str().unwrap_or_default().to_owned(),
+                    description: badge["description"].as_str().unwrap_or_default().to_owned(),
+                    icon: format!("{}/badge-icons/{icon}.png?size=64", ready::cdn()),
+                    link: text(&badge["link"]).map(str::to_owned),
+                })
+            })
+            .collect(),
+        connections: value["connected_accounts"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|account| {
+                Some(ConnectedAccount {
+                    kind: text(&account["type"])?.to_owned(),
+                    name: text(&account["name"])?.to_owned(),
+                    verified: account["verified"].as_bool().unwrap_or(false),
+                })
+            })
+            .collect(),
+        theme: theme(&server["theme_colors"]).or_else(|| theme(&own["theme_colors"])),
+        server_tag: {
+            let tag = &user["primary_guild"];
+            if tag["identity_enabled"].as_bool() == Some(true) {
+                let text_tag = text(&tag["tag"]);
+                let badge = text(&tag["badge"]);
+                let guild = text(&tag["identity_guild_id"]);
+                match (text_tag, badge, guild) {
+                    (Some(text_tag), Some(badge), Some(guild)) => Some(ServerTag {
+                        tag: text_tag.to_owned(),
+                        badge: format!(
+                            "{}/guild-tag-badges/{guild}/{badge}.png?size=64",
+                            ready::cdn()
+                        ),
+                    }),
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        },
+        nameplate: text(&user["collectibles"]["nameplate"]["asset"])
+            .map(|asset| format!("{}/assets/collectibles/{asset}static.png", ready::cdn())),
+        effects: Vec::new(),
         banner,
         accent: color(&server["accent_color"])
             .or_else(|| color(&own["accent_color"]))
@@ -219,9 +364,18 @@ mod tests {
     fn the_servers_profile_wins_over_their_own() {
         let answer = json!({
             "user": {"id": "1400000000000000200", "username": "ann", "global_name": "Ann",
-                     "avatar": "abc", "banner": null, "accent_color": 16711680},
+                     "avatar": "abc", "banner": null, "accent_color": 16711680,
+                     "avatar_decoration_data": {"asset": "a_ring", "sku_id": "1", "expires_at": null},
+                     "primary_guild": {"identity_guild_id": "10", "identity_enabled": true,
+                                       "tag": "TEST", "badge": "guild-icon"},
+                     "collectibles": {"nameplate": {"asset": "plate/"}}},
             "user_profile": {"bio": "Hi, I'm **Ann**", "pronouns": "she/her", "banner": "def",
-                             "accent_color": null},
+                             "accent_color": null, "theme_colors": [1118481, 16711680],
+                             "profile_effect": {"id": "42"}},
+            "connected_accounts": [{"type": "github", "id": "123", "name": "ann-dev", "verified": true}],
+            "badges": [{"id": "nitro", "description": "Nitro subscriber", "icon": "nitro-icon",
+                        "link": "https://discord.com/nitro"}],
+            "guild_badges": [{"id": "server", "description": "Server badge", "icon": "server-icon"}],
             "guild_member_profile": {"guild_id": "10", "bio": "", "pronouns": "", "banner": "ghi",
                                      "accent_color": 255},
             "guild_member": {"nick": "Annie", "avatar": null, "roles": ["30", "31"],
@@ -245,6 +399,41 @@ mod tests {
                 .ends_with("/guilds/10/users/1400000000000000200/banners/ghi.png?size=600")
         );
         assert_eq!(profile.accent, Some(255));
+        assert_eq!(
+            profile.avatar_decoration.as_deref(),
+            Some(
+                "https://cdn.discordapp.com/avatar-decoration-presets/a_ring.png?size=160&passthrough=true"
+            )
+        );
+        assert_eq!(profile.badges.len(), 2);
+        assert_eq!(profile.badges[0].id, "nitro");
+        assert_eq!(profile.badges[0].description, "Nitro subscriber");
+        assert_eq!(
+            profile.badges[0].link.as_deref(),
+            Some("https://discord.com/nitro")
+        );
+        assert_eq!(
+            profile.badges[1].icon,
+            "https://cdn.discordapp.com/badge-icons/server-icon.png?size=64"
+        );
+        assert_eq!(profile.connections.len(), 1);
+        assert_eq!(profile.connections[0].kind, "github");
+        assert_eq!(profile.connections[0].name, "ann-dev");
+        assert!(profile.connections[0].verified);
+        assert_eq!(profile.theme, Some((1118481, 16711680)));
+        assert_eq!(
+            profile.server_tag.as_ref().map(|tag| tag.tag.as_str()),
+            Some("TEST")
+        );
+        assert_eq!(
+            profile.server_tag.as_ref().map(|tag| tag.badge.as_str()),
+            Some("https://cdn.discordapp.com/guild-tag-badges/10/guild-icon.png?size=64")
+        );
+        assert_eq!(
+            profile.nameplate.as_deref(),
+            Some("https://cdn.discordapp.com/assets/collectibles/plate/static.png")
+        );
+        assert_eq!(effect_id(&answer, Some("10")), Some("42"));
         assert_eq!(
             profile.pronouns.as_deref(),
             Some("she/her"),
@@ -322,5 +511,19 @@ mod tests {
                 .ends_with("/banners/1400000000000000200/def.png?size=600")
         );
         assert_eq!(profile.accent, Some(16_711_680));
+    }
+
+    #[test]
+    fn profile_effect_layers_come_in_drawing_order() {
+        let product = json!({"items": [{"type": 1, "effects": [
+            {"src": "top.png", "position": {"x": 4, "y": 5}, "width": 200, "height": 300, "zIndex": 2},
+            {"src": "bottom.png", "position": {"x": 0, "y": 1}, "width": 100, "height": 150, "zIndex": 1}
+        ]}]});
+        let layers = parse_effect(&product);
+        assert_eq!(layers.len(), 2);
+        assert_eq!(layers[0].image, "bottom.png");
+        assert_eq!(layers[1].image, "top.png");
+        assert_eq!((layers[1].x, layers[1].y), (4, 5));
+        assert_eq!((layers[1].width, layers[1].height), (200, 300));
     }
 }

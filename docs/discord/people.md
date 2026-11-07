@@ -246,8 +246,17 @@ profile once each time the open DM changes to someone else. Yapfast fetches it
 from `GET /users/{id}/profile` with the open server's id, so the server's
 nickname, avatar, banner, bio and pronouns win over the person's own, and the
 profile lists their roles in role order, when they joined Discord and the server,
-and the servers and friends the account shares with them. Profiles are kept for
-five minutes, at most 32 of them. Presence and activity come from the member
+and the servers and friends the account shares with them. The avatar decoration
+from `user.avatar_decoration_data.asset` draws over the avatar at 120% of its
+size. Profile `badges` and `guild_badges` show beside the avatar with their
+descriptions and links. The full profile lists public `connected_accounts` with
+their verification marks. `theme_colors` fill the card, `primary_guild` adds its
+tag beside the username, and `collectibles.nameplate` draws behind the name.
+For `profile_effect.id`, Yapfast asks `GET /collectibles-products/{id}` and draws
+the returned APNG layers in `zIndex` order on the full profile. A catalog failure
+leaves the rest of the profile intact. These pictures use Discord's CDN and stay
+in the picture cache. Profiles are kept for five minutes, at most 32 of them.
+Presence and activity come from the member
 list, since the profile doesn't carry them. When Discord refuses, the card
 keeps what the member list knew and says so. A linked profile with nobody in
 a list to show first opens with the id as its name while that fetch runs.
@@ -331,9 +340,9 @@ to remove it. The client never sends the bio, pronouns or banner to
 The client's tab also has Profile Widgets, an avatar decoration, a
 nameplate, a profile effect, a frame, display name styles and, with
 Nitro, a profile theme of two colours in place of the banner colour, then
-the Server Tag and badges. Yapfast leaves them out, as it shows none of
-them. Changing the username, in My Account with the password, is left
-for later.
+the Server Tag and badges. Yapfast shows decorations, nameplates, effects,
+themes, Server Tags and badges but leaves their editors out. Changing the
+username, in My Account with the password, is left for later.
 
 ## Editing one's server profile
 

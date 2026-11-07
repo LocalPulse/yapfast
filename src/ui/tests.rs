@@ -88,6 +88,12 @@ fn equal_lists_stay_so_rows_count_as_unchanged() {
                 name: "Mod".into(),
                 color: Some(0xff0000),
             }],
+            badges: vec![yapfast_core::chat::ProfileBadge {
+                id: "nitro".into(),
+                description: "Nitro subscriber".into(),
+                icon: None,
+                link: None,
+            }],
             ..Default::default()
         },
         ..Default::default()
@@ -102,6 +108,7 @@ fn equal_lists_stay_so_rows_count_as_unchanged() {
     let changed = changed_profile(&shown, profile_data(&mut pictures, &state, &renamed))
         .expect("a new name shows");
     assert!(changed.servers == shown.servers, "its lists stay");
+    assert!(changed.badges == shown.badges, "its badges stay");
 }
 
 #[test]
