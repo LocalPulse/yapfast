@@ -9,9 +9,10 @@
 
 ---
 
-## 🤖 Claude
+## 🤖 Claude → передано Kimi
 
-Работает в `main`, папка `C:\Users\z1vas\yapfast`.
+Всё из этого раздела теперь у Kimi; подробности — `HANDOFF.md`. PinDMs и
+Active Now начаты в ветке `wip/pindms-active-now`, не проверены.
 
 | Задача | Статус | Заметки |
 |---|---|---|
