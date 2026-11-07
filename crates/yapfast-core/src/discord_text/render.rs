@@ -546,6 +546,41 @@ pub(super) fn chat_profile(
     Profile {
         name: profile.name,
         avatar: Some(profile.avatar),
+        avatar_decoration: profile.avatar_decoration,
+        badges: profile
+            .badges
+            .into_iter()
+            .map(|badge| crate::chat::ProfileBadge {
+                id: badge.id,
+                description: badge.description,
+                icon: Some(badge.icon),
+                link: badge.link,
+            })
+            .collect(),
+        connections: profile
+            .connections
+            .into_iter()
+            .map(|account| crate::chat::ProfileConnection {
+                kind: account.kind,
+                name: account.name,
+                verified: account.verified,
+            })
+            .collect(),
+        theme: profile.theme,
+        server_tag: profile.server_tag.map(|tag| (tag.tag, tag.badge)),
+        nameplate: profile.nameplate,
+        effects: profile
+            .effects
+            .into_iter()
+            .map(|effect| crate::chat::ProfileEffect {
+                image: effect.image,
+                x: effect.x,
+                y: effect.y,
+                width: effect.width,
+                height: effect.height,
+                z_index: effect.z_index,
+            })
+            .collect(),
         banner: profile.banner,
         accent: profile.accent,
         pronouns: profile.pronouns.unwrap_or_default(),

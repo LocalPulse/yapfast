@@ -627,6 +627,12 @@ impl Api {
         self.json(self.request(Method::GET, &path)).await
     }
 
+    /// A collectible product, including the images of a profile effect.
+    pub async fn collectible_product(&self, sku: &str) -> Result<Value> {
+        let path = format!("/collectibles-products/{sku}");
+        self.json(self.request(Method::GET, &path)).await
+    }
+
     /// Applications' public objects, with their names and icons, as the
     /// client fetches them for activities: `[{id, name, icon, ...}]`.
     pub async fn public_applications(&self, ids: &[&str]) -> Result<Value> {

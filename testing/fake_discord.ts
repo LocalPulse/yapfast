@@ -807,8 +807,16 @@ function wireProfile(user: User, guild: string | null) {
     accent_color: carol ? 0x5865f2 : null,
   };
   return {
-    user: { ...wireUser(user), banner: profile.banner, accent_color: profile.accent_color, bio: profile.bio },
-    user_profile: profile,
+    user: {
+      ...wireUser(user),
+      banner: profile.banner,
+      accent_color: profile.accent_color,
+      bio: profile.bio,
+      avatar_decoration_data: bob ? { asset: "a_bob-decoration", sku_id: "1", expires_at: null } : null,
+      primary_guild: bob ? { identity_guild_id: GUILD, identity_enabled: true, tag: "BASS", badge: "bob-guild" } : null,
+      collectibles: bob ? { nameplate: { sku_id: "2", asset: "bob-plate/", label: "Bob's nameplate" } } : null,
+    },
+    user_profile: { ...profile, theme_colors: bob ? [0x151823, 0x5865f2] : null, profile_effect: bob ? { id: "3" } : null },
     ...(guild === GUILD && isMember
       ? {
           guild_member_profile: guildMemberProfile(user.id),
@@ -817,7 +825,9 @@ function wireProfile(user: User, guild: string | null) {
       : {}),
     mutual_guilds: inServer ? [{ id: GUILD, nick: null }] : [],
     mutual_friends: bob ? [wireUser(users.carol)] : [],
-    badges: [],
+    badges: bob ? [{ id: "nitro", description: "Subscriber since 2020", icon: "bob-nitro", link: "https://discord.com/nitro" }] : [],
+    guild_badges: bob && guild === GUILD ? [{ id: "server", description: "Server badge", icon: "bob-server" }] : [],
+    connected_accounts: bob ? [{ type: "github", id: "123", name: "bob-dev", verified: true }] : [],
     premium_type: null,
   };
 }
@@ -5304,6 +5314,17 @@ async function api(req: Request, path: string, origin: string): Promise<Response
       });
     }
     return new Response(null, { status: 204 });
+  }
+
+  if (method === "GET" && path === "/collectibles-products/3") {
+    return json({
+      sku_id: "3",
+      items: [{
+        type: 1,
+        sku_id: "3",
+        effects: [{ src: `${origin}/assets/collectibles/bob-effect.png`, position: { x: 0, y: 0 }, width: 450, height: 600, zIndex: 1 }],
+      }],
+    });
   }
 
   if (method === "GET" && (m = path.match(/^\/users\/(\d+|@me)\/profile$/))) {

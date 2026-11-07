@@ -612,6 +612,19 @@ pub struct Profile {
     pub handle: String,
     /// The address of their avatar; see [`DiscordCommand::Pictures`].
     pub avatar: Option<String>,
+    /// The address of the decoration drawn over their avatar.
+    pub avatar_decoration: Option<String>,
+    /// Their Discord and server badges.
+    pub badges: Vec<ProfileBadge>,
+    /// Their public connected accounts.
+    pub connections: Vec<ProfileConnection>,
+    /// Their profile's background and accent colours.
+    pub theme: Option<(u32, u32)>,
+    /// Their server tag and badge address.
+    pub server_tag: Option<(String, String)>,
+    /// The static nameplate and profile effect layer addresses.
+    pub nameplate: Option<String>,
+    pub effects: Vec<ProfileEffect>,
     /// The address of their banner, and its colour when there's no picture.
     pub banner: Option<String>,
     pub accent: Option<u32>,
@@ -631,6 +644,36 @@ pub struct Profile {
     /// The servers and friends this account shares with them.
     pub servers: Vec<ProfileServer>,
     pub friends: Vec<ProfileFriend>,
+}
+
+/// A Discord or server badge on a profile.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ProfileBadge {
+    pub id: String,
+    pub description: String,
+    /// The address of its icon; see [`DiscordCommand::Pictures`].
+    pub icon: Option<String>,
+    /// What clicking it opens, when Discord gives a link.
+    pub link: Option<String>,
+}
+
+/// A public account connected to a Discord profile.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ProfileConnection {
+    pub kind: String,
+    pub name: String,
+    pub verified: bool,
+}
+
+/// One image layer of a Discord profile effect.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ProfileEffect {
+    pub image: String,
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+    pub z_index: i32,
 }
 
 /// A server a profile's person shares with this account.

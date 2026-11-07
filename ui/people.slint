@@ -133,8 +133,18 @@ export global ActivityClock {
     in property <int> now;
 }
 
+/// A Discord or server badge on a profile.
+export struct ProfileBadge { id: string, description: string, picture: image, link: string }
+/// A public account connected to a Discord profile.
+export struct ProfileConnection { kind: string, name: string, verified: bool }
+/// One image layer of a Discord profile effect.
+export struct ProfileEffect { picture: image, x: int, y: int, width: int, height: int }
+
 export struct ProfileData {
     id: string, name: string, initial: string, tint: color, picture: image,
+    decoration: image, badges: [ProfileBadge], connections: [ProfileConnection],
+    theme-first: color, theme-second: color, has-theme: bool,
+    server-tag: string, server-tag-badge: image, nameplate: image, effects: [ProfileEffect],
     /// A Discord username or Matrix ID, then pronouns when they give them.
     handle: string,
     /// The banner picture, else its colour.
@@ -429,7 +439,7 @@ export component ProfileCard inherits Rectangle {
     property <length> avatar-size: root.large ? 120px : 80px;
     property <length> pad: root.large ? 24px : 16px;
     height: min(body.preferred-height, root.limit);
-    background: Theme.sidebar;
+    background: root.data.has-theme ? @linear-gradient(135deg, root.data.theme-first, root.data.theme-second) : Theme.sidebar;
     border-radius: root.docked ? 0px : 12px; border-width: root.docked ? 0px : 1px; border-color: Theme.edge;
     drop-shadow-blur: root.docked ? 0px : 24px; drop-shadow-color: root.docked ? transparent : #00000080; drop-shadow-offset-y: root.docked ? 0px : 8px;
     accessible-role: groupbox;
@@ -454,11 +464,45 @@ export component ProfileCard inherits Rectangle {
                             width: parent.width; height: parent.height; source: root.data.banner; image-fit: cover;
                         }
                     }
+                    if root.data.badges.length > 0: Rectangle {
+                        x: parent.width - root.pad - self.width;
+                        y: root.banner-height - 12px;
+                        height: 32px;
+                        border-radius: 8px;
+                        background: Theme.sidebar;
+                        HorizontalLayout {
+                            padding: 6px;
+                            spacing: 4px;
+                            for badge in root.data.badges: Rectangle {
+                                width: 20px;
+                                height: 20px;
+                                accessible-role: button;
+                                accessible-label: badge.description;
+                                accessible-action-default => {
+                                    if badge.link != "" { root.open-link(badge.link); }
+                                }
+                                Image { width: 20px; height: 20px; source: badge.picture; }
+                                if badge.link != "": TouchArea {
+                                    mouse-cursor: MouseCursor.pointer;
+                                    clicked => { root.open-link(badge.link); }
+                                }
+                            }
+                        }
+                    }
                     Rectangle {
                         x: root.pad - 6px; y: root.banner-height - root.avatar-size / 2 - 6px;
                         width: root.avatar-size + 12px; height: self.width; border-radius: self.width / 2;
                         background: Theme.sidebar;
                         Avatar { size: root.avatar-size; initial: root.data.initial; tint: root.data.tint; picture: root.data.picture; }
+                        if root.data.decoration.width > 0: Image {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            width: root.avatar-size * 1.2;
+                            height: self.width;
+                            source: root.data.decoration;
+                            accessible-role: image;
+                            accessible-label: "Avatar decoration";
+                        }
                         if root.data.presence != "" && root.data.presence != "offline": StatusDot {
                             x: parent.width - self.width - (root.large ? 14px : 10px); y: parent.height - self.height - (root.large ? 14px : 10px);
                             presence: root.data.presence; ring: Theme.sidebar;
@@ -477,12 +521,32 @@ export component ProfileCard inherits Rectangle {
                     padding-left: root.pad; padding-right: root.pad; spacing: 16px;
                     VerticalLayout {
                         spacing: 2px;
-                        Text {
-                            text: root.data.name; color: Theme.text; font-size: root.large ? 26px : 20px; font-weight: 700;
-                            overflow: elide;
-                            if !root.large && !root.preview: TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.enlarge(); } }
+                        Rectangle {
+                            height: name-text.preferred-height;
+                            if root.data.nameplate.width > 0: Image {
+                                x: -8px; y: -4px; width: parent.width + 16px; height: parent.height + 8px;
+                                source: root.data.nameplate; image-fit: fill;
+                                accessible-role: image; accessible-label: "Nameplate";
+                            }
+                            name-text := Text {
+                                width: parent.width;
+                                text: root.data.name; color: Theme.text; font-size: root.large ? 26px : 20px; font-weight: 700;
+                                overflow: elide;
+                                if !root.large && !root.preview: TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.enlarge(); } }
+                            }
                         }
-                        if root.data.handle != "": Text { text: root.data.handle; color: Theme.secondary; font-size: 14px; font-weight: 500; overflow: elide; }
+                        if root.data.handle != "": HorizontalLayout {
+                            spacing: 6px;
+                            Text { text: root.data.handle; color: Theme.secondary; font-size: 14px; font-weight: 500; overflow: elide; }
+                            if root.data.server-tag != "": Rectangle {
+                                height: 20px; border-radius: 4px; background: Theme.raised;
+                                HorizontalLayout {
+                                    padding-left: 4px; padding-right: 4px; spacing: 3px;
+                                    Image { width: 14px; height: 14px; source: root.data.server-tag-badge; }
+                                    Text { text: root.data.server-tag; color: Theme.secondary; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+                                }
+                            }
+                        }
                         if root.data.activity != "" || root.data.activity-emoji != "": StatusText {
                             text: root.data.activity; emoji-url: root.data.activity-emoji;
                             color: Theme.secondary; font-size: 14px; wrap: word-wrap; max-height: 40px;
@@ -513,6 +577,19 @@ export component ProfileCard inherits Rectangle {
                                     text: root.data.bio; default-color: Theme.text; link-color: Theme.link;
                                     link-clicked(link) => { root.open-link(link); }
                                 }
+                            }
+                        }
+                    }
+                    if root.full && root.data.connections.length > 0: VerticalLayout {
+                        spacing: 6px;
+                        ProfileHeading { text: "CONNECTED ACCOUNTS"; }
+                        for account in root.data.connections: HorizontalLayout {
+                            spacing: 8px;
+                            Text { text: account.kind; color: Theme.secondary; font-size: 13px; font-weight: 700; vertical-alignment: center; }
+                            Text { text: account.name; color: Theme.text; font-size: 14px; overflow: elide; vertical-alignment: center; horizontal-stretch: 1; }
+                            if account.verified: Text {
+                                text: "✓"; color: Theme.live; font-size: 14px; font-weight: 700;
+                                accessible-label: "Verified " + account.kind + " account";
                             }
                         }
                     }
@@ -597,6 +674,15 @@ export component ProfileCard inherits Rectangle {
                     }
                 }
             }
+        }
+    }
+    if root.large: Rectangle {
+        border-radius: 12px; clip: true;
+        for effect in root.data.effects: Image {
+            x: effect.x * 1px; y: effect.y * 1px;
+            width: effect.width * 1px; height: effect.height * 1px;
+            source: effect.picture;
+            accessible-role: image; accessible-label: "Profile effect";
         }
     }
     if root.large: Rectangle {

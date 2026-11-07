@@ -194,6 +194,9 @@ pub(super) fn changed_profile(shown: &ProfileData, mut data: ProfileData) -> Opt
     data.servers = same_list(&shown.servers, data.servers);
     data.friends = same_list(&shown.friends, data.friends);
     data.activities = same_list(&shown.activities, data.activities);
+    data.badges = same_list(&shown.badges, data.badges);
+    data.connections = same_list(&shown.connections, data.connections);
+    data.effects = same_list(&shown.effects, data.effects);
     data.role_rows = same_role_rows(&shown.role_rows, data.role_rows);
     data.role_rows_large = same_role_rows(&shown.role_rows_large, data.role_rows_large);
     (*shown != data).then_some(data)
@@ -224,6 +227,57 @@ pub(super) fn profile_data(
         initial: initial(&profile.name),
         tint: tint(&profile.name),
         picture: cached_picture(pictures, state, profile.avatar.as_deref()),
+        decoration: cached_picture(pictures, state, profile.avatar_decoration.as_deref()),
+        badges: ModelRc::new(VecModel::from(
+            profile
+                .badges
+                .iter()
+                .map(|badge| ProfileBadge {
+                    id: badge.id.as_str().into(),
+                    description: badge.description.as_str().into(),
+                    picture: cached_picture(pictures, state, badge.icon.as_deref()),
+                    link: badge.link.as_deref().unwrap_or_default().into(),
+                })
+                .collect::<Vec<_>>(),
+        )),
+        connections: ModelRc::new(VecModel::from(
+            profile
+                .connections
+                .iter()
+                .map(|account| ProfileConnection {
+                    kind: account.kind.as_str().into(),
+                    name: account.name.as_str().into(),
+                    verified: account.verified,
+                })
+                .collect::<Vec<_>>(),
+        )),
+        theme_first: role_color(profile.theme.map(|theme| theme.0)),
+        theme_second: role_color(profile.theme.map(|theme| theme.1)),
+        has_theme: profile.theme.is_some(),
+        server_tag: profile
+            .server_tag
+            .as_ref()
+            .map(|tag| tag.0.as_str().into())
+            .unwrap_or_default(),
+        server_tag_badge: cached_picture(
+            pictures,
+            state,
+            profile.server_tag.as_ref().map(|tag| tag.1.as_str()),
+        ),
+        nameplate: cached_picture(pictures, state, profile.nameplate.as_deref()),
+        effects: ModelRc::new(VecModel::from(
+            profile
+                .effects
+                .iter()
+                .map(|effect| ProfileEffect {
+                    picture: cached_picture(pictures, state, Some(effect.image.as_str())),
+                    x: effect.x,
+                    y: effect.y,
+                    width: effect.width,
+                    height: effect.height,
+                })
+                .collect::<Vec<_>>(),
+        )),
         handle: handle.into(),
         banner: cached_picture(pictures, state, profile.banner.as_deref()),
         accent: role_color(profile.accent),
