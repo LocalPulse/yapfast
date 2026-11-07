@@ -567,6 +567,7 @@ fn the_thread_beside_suggests_mentions_and_emoji_above_its_composer() {
         adapter.app.apply(Event::Members {
             room: "discord:10:11".into(),
             members: Ok(vec![ChatMember {
+                avatar_decoration: None,
                 id: "3".into(),
                 name: "Carol".into(),
                 username: Some("carol".into()),

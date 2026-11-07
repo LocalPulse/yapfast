@@ -227,7 +227,11 @@ pub(super) fn profile_data(
         initial: initial(&profile.name),
         tint: tint(&profile.name),
         picture: cached_picture(pictures, state, profile.avatar.as_deref()),
-        decoration: cached_picture(pictures, state, profile.avatar_decoration.as_deref()),
+        decoration_url: profile
+            .avatar_decoration
+            .as_deref()
+            .unwrap_or_default()
+            .into(),
         badges: ModelRc::new(VecModel::from(
             profile
                 .badges
@@ -246,7 +250,11 @@ pub(super) fn profile_data(
                 .iter()
                 .map(|account| ProfileConnection {
                     kind: account.kind.as_str().into(),
+                    service: connection_service(&account.kind).into(),
                     name: account.name.as_str().into(),
+                    link: connection_link(&account.kind, &account.id, &account.name)
+                        .unwrap_or_default()
+                        .into(),
                     verified: account.verified,
                 })
                 .collect::<Vec<_>>(),
@@ -357,6 +365,63 @@ pub(super) fn profile_data(
     }
 }
 
+/// A connected account's service as Discord's profile names it.
+pub(super) fn connection_service(kind: &str) -> &str {
+    match kind {
+        "amazon-music" => "Amazon Music",
+        "battlenet" => "Battle.net",
+        "bluesky" => "Bluesky",
+        "bungie" => "Bungie.net",
+        "crunchyroll" => "Crunchyroll",
+        "domain" => "Domain",
+        "ebay" => "eBay",
+        "epicgames" => "Epic Games",
+        "facebook" => "Facebook",
+        "github" => "GitHub",
+        "instagram" => "Instagram",
+        "leagueoflegends" => "League of Legends",
+        "mastodon" => "Mastodon",
+        "paypal" => "PayPal",
+        "playstation" | "playstation-stg" => "PlayStation Network",
+        "reddit" => "Reddit",
+        "riotgames" => "Riot Games",
+        "roblox" => "Roblox",
+        "samsung" => "Samsung Galaxy",
+        "soundcloud" => "SoundCloud",
+        "spotify" => "Spotify",
+        "skype" => "Skype",
+        "steam" => "Steam",
+        "tiktok" => "TikTok",
+        "twitch" => "Twitch",
+        "twitter" => "X",
+        "xbox" => "Xbox",
+        "youtube" => "YouTube",
+        other => other,
+    }
+}
+
+/// Where a connected account's page is, for the services whose pages its
+/// id or name gives; none for the others, which show without a link.
+pub(super) fn connection_link(kind: &str, id: &str, name: &str) -> Option<String> {
+    let plain = |text: &str| !text.is_empty() && !text.contains(['/', '?', '#', ' ']);
+    let (id_ok, name_ok) = (plain(id), plain(name));
+    Some(match kind {
+        "github" if name_ok => format!("https://github.com/{name}"),
+        "twitter" if name_ok => format!("https://x.com/{name}"),
+        "twitch" if name_ok => format!("https://www.twitch.tv/{name}"),
+        "reddit" if name_ok => format!("https://www.reddit.com/user/{name}"),
+        "tiktok" if name_ok => format!("https://www.tiktok.com/@{name}"),
+        "instagram" if name_ok => format!("https://www.instagram.com/{name}"),
+        "bluesky" if name_ok => format!("https://bsky.app/profile/{name}"),
+        "domain" if name_ok => format!("https://{name}"),
+        "steam" if id_ok => format!("https://steamcommunity.com/profiles/{id}"),
+        "youtube" if id_ok => format!("https://www.youtube.com/channel/{id}"),
+        "spotify" if id_ok => format!("https://open.spotify.com/user/{id}"),
+        "roblox" if id_ok => format!("https://www.roblox.com/users/{id}/profile"),
+        _ => return None,
+    })
+}
+
 pub(super) fn presence_name(presence: Option<Presence>) -> &'static str {
     match presence {
         Some(Presence::Online) => "online",
@@ -407,4 +472,27 @@ pub(super) fn role_color(rgb: Option<u32>) -> slint::Color {
     rgb.map_or_else(slint::Color::default, |rgb| {
         slint::Color::from_rgb_u8((rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8)
     })
+}
+
+#[cfg(test)]
+mod connection_tests {
+    use super::*;
+
+    #[test]
+    fn connected_accounts_link_to_their_pages_where_known() {
+        assert_eq!(connection_service("twitter"), "X");
+        assert_eq!(connection_service("newservice"), "newservice");
+        assert_eq!(
+            connection_link("github", "1", "bob-dev").as_deref(),
+            Some("https://github.com/bob-dev")
+        );
+        assert_eq!(
+            connection_link("steam", "7656", "Bob").as_deref(),
+            Some("https://steamcommunity.com/profiles/7656")
+        );
+        // Names that would make another address, and services without a
+        // page Yapfast can name, have no link.
+        assert_eq!(connection_link("github", "1", "a/b"), None);
+        assert_eq!(connection_link("xbox", "1", "Bob"), None);
+    }
 }

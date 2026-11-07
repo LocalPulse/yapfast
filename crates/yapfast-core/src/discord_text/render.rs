@@ -101,6 +101,7 @@ pub(super) fn found(
         sender: discord::sender_id(&message.author_id),
         spoilers: true,
         avatar: Some(discord.avatar(guild, &message.author_id)),
+        avatar_decoration: discord.decoration(&message.author_id),
         color: server.and_then(|server| discord.color(server, &message.author_id)),
         bot: message.bot,
         body,
@@ -562,6 +563,7 @@ pub(super) fn chat_profile(
             .into_iter()
             .map(|account| crate::chat::ProfileConnection {
                 kind: account.kind,
+                id: account.id,
                 name: account.name,
                 verified: account.verified,
             })
@@ -777,6 +779,7 @@ pub(super) fn chat_member(member: ListedMember) -> ChatMember {
         username: member.username,
         role: Role::Member,
         avatar: Some(member.avatar),
+        avatar_decoration: member.decoration,
         group: Some(member.group),
         presence: Some(discord::presence(member.presence)),
         color: member.color,

@@ -2943,6 +2943,11 @@ impl Discord {
         self.read_names().username(user).map(str::to_owned)
     }
 
+    /// The address of a user's avatar decoration, if they wear one.
+    pub fn decoration(&self, user: &str) -> Option<String> {
+        self.read_names().decoration(user)
+    }
+
     /// The address of a user's avatar, in a server or in DMs.
     pub fn avatar(&self, guild: Option<&str>, user: &str) -> String {
         self.read_names().avatar(guild.and_then(server), user)

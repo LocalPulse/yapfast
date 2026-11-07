@@ -76,6 +76,7 @@ pub(super) fn command(
                 .members_with_role(guild, &role)
                 .into_iter()
                 .map(|user| ChatMember {
+                    avatar_decoration: discord.decoration(&user),
                     name: discord.name(guild, &user).unwrap_or_else(|| user.clone()),
                     username: discord.username(&user),
                     avatar: Some(discord.avatar(Some(guild), &user)),
@@ -131,6 +132,7 @@ pub(super) fn command(
                 let members = found
                     .into_iter()
                     .map(|user| ChatMember {
+                        avatar_decoration: discord.decoration(&user),
                         name: discord.name(&guild, &user).unwrap_or_else(|| user.clone()),
                         username: discord.username(&user),
                         avatar: Some(discord.avatar(Some(&guild), &user)),

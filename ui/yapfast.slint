@@ -3078,12 +3078,6 @@ export component YapfastWindow inherits Window {
                                 remove(id) => { root.remove-friend-request(id); }
                                 open(id) => { root.select-room(id); }
                             }
-                            if root.friends-open && parent.width >= 1000px: ActiveNowColumn {
-                                x: parent.width - self.width; width: 360px; height: parent.height;
-                                cards: root.active-now;
-                                open-room(room) => { root.open-conversation(room); }
-                                open-person(id, x, y) => { root.open-context-menu(id, true, x, y); }
-                            }
                             if root.friends-open: FriendsScreen {
                                 width: parent.width - (parent.width >= 1000px ? 360px : 0px); height: parent.height;
                                 rows: root.friends-all ? root.friends : root.friends-online;
@@ -3094,6 +3088,12 @@ export component YapfastWindow inherits Window {
                                 open-voice(id) => { root.open-conversation(id); }
                                 add-friend => { root.open-add-friend(); }
                                 open-friend-menu(id, x, y) => { root.open-context-menu(id, true, x, y); }
+                            }
+                            if root.friends-open && parent.width >= 1000px: ActiveNowColumn {
+                                x: parent.width - self.width; width: 360px; height: parent.height;
+                                cards: root.active-now;
+                                open-room(room) => { root.open-conversation(room); }
+                                open-person(id, x, y) => { root.open-context-menu(id, true, x, y); }
                             }
                             // The conversation's opening, or what to do when none is chosen.
                             if root.browse-open: BrowseScreen {

@@ -661,6 +661,11 @@ pub(super) fn message_row_within(
     let row = MessageRow {
         picture_url: SharedString::default(),
         reply_picture_url: SharedString::default(),
+        decoration_url: message
+            .avatar_decoration
+            .as_deref()
+            .unwrap_or_default()
+            .into(),
         id: message.id.clone().into(),
         item: message.item.clone().into(),
         author: message.author.clone().into(),

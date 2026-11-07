@@ -46,7 +46,10 @@ if not args.seat_plugin.exists():
     subprocess.run([str(Path(__file__).with_name('build-framework-seat')), str(args.seat_plugin)], check=True, timeout=35)
 if not args.gtk_dpi_module.exists():
     subprocess.run([str(Path(__file__).with_name('build-framework-gtk-dpi')), str(args.gtk_dpi_module)], check=True, timeout=35)
-with tempfile.TemporaryDirectory(prefix='yapfast-framework-display-') as temporary:
+# A Wayland socket's path must fit in 108 bytes, which nix-shell's own
+# temporary directory can leave too little of: /tmp then.
+short = '/tmp' if len(tempfile.gettempdir()) > 40 and Path('/tmp').is_dir() else None
+with tempfile.TemporaryDirectory(prefix='yapfast-framework-display-', dir=short) as temporary:
     runtime = Path(temporary)
     runtime.chmod(0o700)
     configuration = runtime / 'config'
@@ -67,7 +70,10 @@ with tempfile.TemporaryDirectory(prefix='yapfast-framework-display-') as tempora
     # Remove all inherited access to the desktop, including its private bus.
     for variable in ('DISPLAY', 'DBUS_SESSION_BUS_ADDRESS', 'HYPRLAND_INSTANCE_SIGNATURE', 'SWAYSOCK'):
         environment.pop(variable, None)
-    compositor = subprocess.Popen([args.weston, '--backend=headless', '--renderer=gl',
+    # GL by default; YAPFAST_WESTON_RENDERER=pixman where EGL has no
+    # surfaceless platform, as under WSL.
+    renderer = os.environ.get('YAPFAST_WESTON_RENDERER', 'gl')
+    compositor = subprocess.Popen([args.weston, '--backend=headless', f'--renderer={renderer}',
         f'--width={args.width}', f'--height={args.height}', f'--scale={args.scale}', '--refresh-rate=60000', '--socket=wayland-yapfast-frameworks',
         *(['--shell=kiosk'] if args.kiosk else []),
         *weston_config, '--idle-time=0', '--debug', '--modules=' + str(args.seat_plugin.resolve()), '--log=' + str(args.compositor_log)],

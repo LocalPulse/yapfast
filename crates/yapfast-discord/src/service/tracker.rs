@@ -1104,6 +1104,7 @@ impl Tracker {
                     name: names.user_name(user).unwrap_or("Discord user").to_owned(),
                     username: names.username(user).map(str::to_owned),
                     avatar: names.avatar(None, user),
+                    decoration: names.decoration(user),
                     group: heading.clone(),
                     presence: known.presence,
                     color: None,

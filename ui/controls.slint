@@ -247,11 +247,21 @@ export component Avatar inherits Rectangle {
             PictureStore.request(root.picture-url);
         }
     }
-    init => { root.request-picture(); }
+    init => { root.request-picture(); root.request-decoration(); }
     changed picture-url => { root.request-picture(); }
     changed shown-picture => { root.request-picture(); }
     in property <length> size: 40px;
     in property <bool> speaking;
+    /// The decoration Discord draws over the avatar, by its address: a
+    /// frame 1.2 times the avatar's size, centred on it, as Discord's.
+    in property <string> decoration-url;
+    property <image> decoration: root.decoration-url != "" ? PictureStore.picture(root.decoration-url, PictureStore.revision) : @image-url("");
+    function request-decoration() {
+        if root.decoration-url != "" && root.decoration.width == 0 {
+            PictureStore.request(root.decoration-url);
+        }
+    }
+    changed decoration-url => { root.request-decoration(); }
     width: root.size; height: root.size;
     border-radius: root.size / 2;
     background: root.shown-picture.width > 0 ? transparent : root.tint;
@@ -267,6 +277,12 @@ export component Avatar inherits Rectangle {
     if root.speaking: Rectangle {
         x: -3px; y: -3px; width: root.size + 6px; height: root.size + 6px;
         border-radius: self.width / 2; border-width: 2px; border-color: Theme.live;
+    }
+    if root.decoration.width > 0: Image {
+        x: -root.size * 0.1; y: -root.size * 0.1;
+        width: root.size * 1.2; height: root.size * 1.2;
+        source: root.decoration; image-fit: contain;
+        accessible-role: none;
     }
 }
 

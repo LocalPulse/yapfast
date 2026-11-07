@@ -6,6 +6,8 @@ import { StatusDot } from "rail.slint";
 /// A member of the open room. A heading starts each role's group.
 export struct MemberRow {
     id: string, name: string, initial: string, tint: color, picture: image, heading: string,
+    /// The decoration over their avatar, by its address.
+    decoration-url: string,
     /// Discord's presence: "online", "mobile" (online only on a phone), "idle",
     /// "dnd" or "offline"; empty for Matrix.
     presence: string,
@@ -68,7 +70,7 @@ export component MemberPanel inherits Rectangle {
                     Middle {
                         Rectangle {
                             width: 32px; height: 32px;
-                            Avatar { size: 32px; initial: member.initial; tint: member.tint; picture: member.picture; picture-url: member.picture-url; opacity: member.presence == "offline" ? 0.4 : 1; }
+                            Avatar { size: 32px; initial: member.initial; tint: member.tint; picture: member.picture; picture-url: member.picture-url; decoration-url: member.decoration-url; opacity: member.presence == "offline" ? 0.4 : 1; }
                             if member.presence != "" && member.presence != "offline": StatusDot { x: 20px; y: 20px; presence: member.presence; ring: Theme.sidebar; }
                         }
                     }
@@ -136,13 +138,19 @@ export global ActivityClock {
 /// A Discord or server badge on a profile.
 export struct ProfileBadge { id: string, description: string, picture: image, link: string }
 /// A public account connected to a Discord profile.
-export struct ProfileConnection { kind: string, name: string, verified: bool }
+export struct ProfileConnection {
+    /// Discord's type for the service, and its name as Discord shows it.
+    kind: string, service: string,
+    name: string, verified: bool,
+    /// The account's page, when the service has one Yapfast can name.
+    link: string,
+}
 /// One image layer of a Discord profile effect.
 export struct ProfileEffect { picture: image, x: int, y: int, width: int, height: int }
 
 export struct ProfileData {
     id: string, name: string, initial: string, tint: color, picture: image,
-    decoration: image, badges: [ProfileBadge], connections: [ProfileConnection],
+    decoration-url: string, badges: [ProfileBadge], connections: [ProfileConnection],
     theme-first: color, theme-second: color, has-theme: bool,
     server-tag: string, server-tag-badge: image, nameplate: image, effects: [ProfileEffect],
     /// A Discord username or Matrix ID, then pronouns when they give them.
@@ -464,14 +472,18 @@ export component ProfileCard inherits Rectangle {
                             width: parent.width; height: parent.height; source: root.data.banner; image-fit: cover;
                         }
                     }
+                    // Badges in a rounded box at the right, under the banner,
+                        // as wide as they are, as Discord's profile shows them.
                     if root.data.badges.length > 0: Rectangle {
+                        width: badge-row.preferred-width;
                         x: parent.width - root.pad - self.width;
-                        y: root.banner-height - 12px;
-                        height: 32px;
+                        y: root.banner-height + 10px;
+                        height: 30px;
                         border-radius: 8px;
-                        background: Theme.sidebar;
-                        HorizontalLayout {
-                            padding: 6px;
+                        background: Theme.raised;
+                        border-width: 1px; border-color: Theme.edge;
+                        badge-row := HorizontalLayout {
+                            padding-left: 6px; padding-right: 6px; padding-top: 5px; padding-bottom: 5px;
                             spacing: 4px;
                             for badge in root.data.badges: Rectangle {
                                 width: 20px;
@@ -493,15 +505,9 @@ export component ProfileCard inherits Rectangle {
                         x: root.pad - 6px; y: root.banner-height - root.avatar-size / 2 - 6px;
                         width: root.avatar-size + 12px; height: self.width; border-radius: self.width / 2;
                         background: Theme.sidebar;
-                        Avatar { size: root.avatar-size; initial: root.data.initial; tint: root.data.tint; picture: root.data.picture; }
-                        if root.data.decoration.width > 0: Image {
-                            x: (parent.width - self.width) / 2;
-                            y: (parent.height - self.height) / 2;
-                            width: root.avatar-size * 1.2;
-                            height: self.width;
-                            source: root.data.decoration;
-                            accessible-role: image;
-                            accessible-label: "Avatar decoration";
+                        Avatar {
+                            size: root.avatar-size; initial: root.data.initial; tint: root.data.tint; picture: root.data.picture;
+                            decoration-url: root.data.decoration-url;
                         }
                         if root.data.presence != "" && root.data.presence != "offline": StatusDot {
                             x: parent.width - self.width - (root.large ? 14px : 10px); y: parent.height - self.height - (root.large ? 14px : 10px);
@@ -536,14 +542,24 @@ export component ProfileCard inherits Rectangle {
                             }
                         }
                         if root.data.handle != "": HorizontalLayout {
-                            spacing: 6px;
-                            Text { text: root.data.handle; color: Theme.secondary; font-size: 14px; font-weight: 500; overflow: elide; }
-                            if root.data.server-tag != "": Rectangle {
-                                height: 20px; border-radius: 4px; background: Theme.raised;
-                                HorizontalLayout {
-                                    padding-left: 4px; padding-right: 4px; spacing: 3px;
-                                    Image { width: 14px; height: 14px; source: root.data.server-tag-badge; }
-                                    Text { text: root.data.server-tag; color: Theme.secondary; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+                            spacing: 6px; alignment: start;
+                            Text { text: root.data.handle; color: Theme.secondary; font-size: 14px; font-weight: 500; overflow: elide; vertical-alignment: center; }
+                            // The server tag, a chip as wide as its badge and
+                            // letters, beside the handle, as in Discord.
+                            if root.data.server-tag != "": VerticalLayout {
+                                alignment: center;
+                                Rectangle {
+                                    width: tag-row.preferred-width; height: 20px; border-radius: 4px;
+                                    background: Theme.raised; border-width: 1px; border-color: Theme.edge;
+                                    accessible-role: text; accessible-label: "Server tag " + root.data.server-tag;
+                                    tag-row := HorizontalLayout {
+                                        padding-left: 5px; padding-right: 6px; spacing: 3px;
+                                        if root.data.server-tag-badge.width > 0: VerticalLayout {
+                                            alignment: center;
+                                            Image { width: 14px; height: 14px; source: root.data.server-tag-badge; image-fit: contain; }
+                                        }
+                                        Text { text: root.data.server-tag; color: Theme.text; font-size: 12px; font-weight: 700; vertical-alignment: center; }
+                                    }
                                 }
                             }
                         }
@@ -580,16 +596,40 @@ export component ProfileCard inherits Rectangle {
                             }
                         }
                     }
+                    // Connected accounts as Discord's profile lists them: a box
+                    // each, the account's name over its service, a check for
+                    // a verified one, and its page opening on a click.
                     if root.full && root.data.connections.length > 0: VerticalLayout {
                         spacing: 6px;
-                        ProfileHeading { text: "CONNECTED ACCOUNTS"; }
-                        for account in root.data.connections: HorizontalLayout {
-                            spacing: 8px;
-                            Text { text: account.kind; color: Theme.secondary; font-size: 13px; font-weight: 700; vertical-alignment: center; }
-                            Text { text: account.name; color: Theme.text; font-size: 14px; overflow: elide; vertical-alignment: center; horizontal-stretch: 1; }
-                            if account.verified: Text {
-                                text: "✓"; color: Theme.live; font-size: 14px; font-weight: 700;
-                                accessible-label: "Verified " + account.kind + " account";
+                        ProfileHeading { text: "CONNECTIONS"; }
+                        for account in root.data.connections: Rectangle {
+                            height: 48px; border-radius: 8px;
+                            background: account-touch.has-hover && account.link != "" ? Theme.hover : Theme.raised;
+                            border-width: 1px; border-color: Theme.edge;
+                            accessible-role: button;
+                            accessible-label: account.service + ", " + account.name + (account.verified ? ", verified" : "");
+                            accessible-action-default => { if account.link != "" { root.open-link(account.link); } }
+                            account-touch := TouchArea {
+                                mouse-cursor: account.link != "" ? MouseCursor.pointer : MouseCursor.default;
+                                clicked => { if account.link != "" { root.open-link(account.link); } }
+                            }
+                            HorizontalLayout {
+                                padding-left: 12px; padding-right: 12px; spacing: 10px;
+                                VerticalLayout {
+                                    alignment: center; horizontal-stretch: 1;
+                                    HorizontalLayout {
+                                        spacing: 4px; alignment: start;
+                                        Text { text: account.name; color: Theme.text; font-size: 14px; font-weight: 600; overflow: elide; }
+                                        if account.verified: Text {
+                                            text: "✓"; color: Theme.live; font-size: 13px; font-weight: 700; vertical-alignment: center;
+                                        }
+                                    }
+                                    Text { text: account.service; color: Theme.muted; font-size: 12px; overflow: elide; }
+                                }
+                                if account.link != "": VerticalLayout {
+                                    alignment: center;
+                                    Image { source: @image-url("icons/external-link.svg"); width: 16px; colorize: Theme.secondary; }
+                                }
                             }
                         }
                     }

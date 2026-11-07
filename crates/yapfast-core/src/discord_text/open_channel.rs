@@ -1786,6 +1786,7 @@ impl OpenChannel {
         let timestamp = message.timestamp();
         let ordinary = message.system.is_none();
         ChatMessage {
+            avatar_decoration: discord.decoration(&message.author_id),
             id,
             item: format!("d:{}", message.id),
             author,

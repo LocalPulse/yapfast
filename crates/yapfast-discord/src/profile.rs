@@ -65,6 +65,9 @@ pub struct Badge {
 pub struct ConnectedAccount {
     /// Discord's connection type, such as `github` or `spotify`.
     pub kind: String,
+    /// The account's id on that service, which some services link by.
+    #[serde(default)]
+    pub id: String,
     pub name: String,
     pub verified: bool,
 }
@@ -278,6 +281,7 @@ pub fn parse(value: &Value, guild: Option<&str>) -> Option<Profile> {
             .filter_map(|account| {
                 Some(ConnectedAccount {
                     kind: text(&account["type"])?.to_owned(),
+                    id: text(&account["id"]).unwrap_or_default().to_owned(),
                     name: text(&account["name"])?.to_owned(),
                     verified: account["verified"].as_bool().unwrap_or(false),
                 })

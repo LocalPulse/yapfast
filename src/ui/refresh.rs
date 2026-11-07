@@ -1656,6 +1656,11 @@ impl Adapter {
                         tint: tint(&member.name),
                         picture: slint::Image::default(),
                         picture_url: member.avatar.as_deref().unwrap_or_default().into(),
+                        decoration_url: member
+                            .avatar_decoration
+                            .as_deref()
+                            .unwrap_or_default()
+                            .into(),
                         timed_out: member.timed_out_until.is_some_and(|until| until > now),
                         presence: presence_name(member.presence).into(),
                         color: role_color(member.color),

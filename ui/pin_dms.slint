@@ -1,6 +1,27 @@
-import { Theme } from "theme.slint";
-import { ActionButton, TextField } from "controls.slint";
+import { Theme, Popup } from "theme.slint";
+import { ActionButton, IconButton, TextField } from "controls.slint";
 
+/// A colour a category's heading may take, as typed and as drawn.
+struct SwatchColor { hex: string, color: color }
+
+// One colour a DM category's heading may take.
+component Swatch inherits Rectangle {
+    in property <string> hex;
+    in property <color> fill;
+    in property <bool> chosen;
+    callback picked;
+    width: 28px; height: 28px; border-radius: 6px;
+    background: root.fill;
+    border-width: root.chosen ? 2px : touch.has-hover ? 1px : 0px;
+    border-color: root.chosen ? Theme.text : Theme.secondary;
+    accessible-role: button;
+    accessible-label: "Colour " + root.hex + (root.chosen ? ", chosen" : "");
+    accessible-action-default => { root.picked(); }
+    touch := TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.picked(); } }
+}
+
+// Making or editing a category of pinned DMs, as Vencord's PinDMs does: its
+// name and its heading's colour, from Discord's role colours or typed.
 export component PinCategoryDialog inherits Rectangle {
     in property <bool> open;
     in property <bool> editing;
@@ -10,16 +31,48 @@ export component PinCategoryDialog inherits Rectangle {
     callback save;
     callback cancel;
     callback delete;
-    visible: root.open;
     property <bool> confirm-delete;
-    changed open => { if !root.open { root.confirm-delete = false; } }
-    background: #00000088;
+    property <[SwatchColor]> swatches: [
+        { hex: "#99aab5", color: #99aab5 },
+        { hex: "#1abc9c", color: #1abc9c },
+        { hex: "#2ecc71", color: #2ecc71 },
+        { hex: "#3498db", color: #3498db },
+        { hex: "#9b59b6", color: #9b59b6 },
+        { hex: "#e91e63", color: #e91e63 },
+        { hex: "#f1c40f", color: #f1c40f },
+        { hex: "#e67e22", color: #e67e22 },
+        { hex: "#e74c3c", color: #e74c3c },
+        { hex: "#95a5a6", color: #95a5a6 },
+        { hex: "#607d8b", color: #607d8b },
+        { hex: "#11806a", color: #11806a },
+        { hex: "#1f8b4c", color: #1f8b4c },
+        { hex: "#206694", color: #206694 },
+        { hex: "#71368a", color: #71368a },
+        { hex: "#ad1457", color: #ad1457 },
+        { hex: "#c27c0e", color: #c27c0e },
+        { hex: "#a84300", color: #a84300 },
+        { hex: "#992d22", color: #992d22 },
+        { hex: "#979c9f", color: #979c9f },
+    ];
+    /// The swatch picked last, whose colour the heading's preview shows
+    /// while the colour is still its; -1 before one is picked.
+    property <int> picked: -1;
+    property <int> chosen: root.picked >= 0 && root.swatches[root.picked].hex == root.category-color.to-lowercase() ? root.picked : -1;
+    changed open => { if !root.open { root.confirm-delete = false; root.picked = -1; } }
+    visible: popup-motion.amount > 0;
+    popup-motion := Rectangle {
+        property <float> amount: root.open ? 1 : 0;
+        animate amount { duration: 140ms; easing: ease-out; }
+        visible: false;
+    }
+    background: rgba(0, 0, 0, 0.6 * popup-motion.amount);
     TouchArea { clicked => { root.cancel(); } }
     Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
-        width: 380px;
+        width: min(420px, parent.width - 48px);
         height: content.preferred-height;
+        opacity: Popup.opacity(popup-motion.amount); transform-scale: Popup.scale(popup-motion.amount);
         border-radius: 12px;
         background: Theme.raised;
         border-color: Theme.edge;
@@ -27,26 +80,74 @@ export component PinCategoryDialog inherits Rectangle {
         drop-shadow-blur: 32px;
         drop-shadow-color: #00000066;
         drop-shadow-offset-y: 12px;
+        accessible-role: groupbox;
+        accessible-label: root.editing ? "Edit category" : "New category";
         TouchArea { }
-        content := VerticalLayout {
-            padding: 20px;
-            spacing: 12px;
-            Text { text: root.editing ? "Edit DM category" : "New DM category"; color: Theme.text; font-size: 18px; font-weight: 700; }
-            TextField { label: "Name"; placeholder: "Pinned"; text <=> root.category-name; accepted => { root.save(); } }
-            TextField { label: "Color"; placeholder: "#99aab5"; text <=> root.category-color; accepted => { root.save(); } }
-            if root.error != "": Text { text: root.error; color: Theme.danger; font-size: 13px; wrap: word-wrap; }
-            if root.confirm-delete: Text { text: "Delete this category? Its DMs stay in the list. Click Delete again to confirm."; color: Theme.danger; font-size: 13px; wrap: word-wrap; }
-            HorizontalLayout {
-                spacing: 8px;
-                if root.editing: ActionButton {
-                    text: root.confirm-delete ? "Confirm delete" : "Delete"; danger: true;
-                    clicked => {
-                        if root.confirm-delete { root.delete(); } else { root.confirm-delete = true; }
+        FocusScope {
+            key-pressed(event) => {
+                if event.text == Key.Escape { root.cancel(); return accept; }
+                return reject;
+            }
+            content := VerticalLayout {
+                padding: 20px;
+                spacing: 12px;
+                HorizontalLayout {
+                    Text { text: root.editing ? "Edit category" : "New category"; color: Theme.text; font-size: 18px; font-weight: 700; vertical-alignment: center; horizontal-stretch: 1; }
+                    IconButton { icon: @image-url("icons/x.svg"); label: "Close"; size: 28px; glyph: 18px; clicked => { root.cancel(); } }
+                }
+                Text { text: "NAME"; color: Theme.muted; font-size: 12px; font-weight: 700; letter-spacing: 0.6px; }
+                TextField {
+                    init => { self.focus-input(); }
+                    label: "Name"; placeholder: "Pinned"; text <=> root.category-name; fill: Theme.sunken;
+                    accepted => { root.save(); }
+                }
+                Text { text: "COLOUR"; color: Theme.muted; font-size: 12px; font-weight: 700; letter-spacing: 0.6px; }
+                VerticalLayout {
+                    spacing: 6px;
+                    for row in [0, 1]: HorizontalLayout {
+                        spacing: 6px; alignment: start;
+                        for index in 10: Swatch {
+                            hex: root.swatches[row * 10 + index].hex;
+                            fill: root.swatches[row * 10 + index].color;
+                            chosen: root.category-color.to-lowercase() == root.swatches[row * 10 + index].hex;
+                            picked => {
+                                root.picked = row * 10 + index;
+                                root.category-color = root.swatches[row * 10 + index].hex;
+                            }
+                        }
                     }
                 }
-                Rectangle { horizontal-stretch: 1; }
-                ActionButton { text: "Cancel"; clicked => { root.cancel(); } }
-                ActionButton { text: "Save"; primary: true; clicked => { root.save(); } }
+                HorizontalLayout {
+                    spacing: 8px;
+                    TextField {
+                        label: "Colour"; placeholder: "#99aab5"; text <=> root.category-color; fill: Theme.sunken;
+                        accepted => { root.save(); }
+                    }
+                    // The heading as the DM list will show it.
+                    Rectangle {
+                        width: 150px; border-radius: 6px; background: Theme.sidebar;
+                        Text {
+                            x: 10px; width: parent.width - 20px;
+                            text: root.category-name != "" ? root.category-name : "Pinned";
+                            color: root.chosen >= 0 ? root.swatches[root.chosen].color : Theme.muted;
+                            font-size: 12px; font-weight: 700; letter-spacing: 0.6px; overflow: elide; vertical-alignment: center;
+                        }
+                    }
+                }
+                if root.error != "": Text { text: root.error; color: Theme.danger; font-size: 13px; wrap: word-wrap; }
+                if root.confirm-delete: Text { text: "Delete this category? Its DMs stay in the list. Click Delete again to confirm."; color: Theme.danger; font-size: 13px; wrap: word-wrap; }
+                HorizontalLayout {
+                    spacing: 8px;
+                    if root.editing: ActionButton {
+                        text: root.confirm-delete ? "Confirm delete" : "Delete"; danger: true; ghost: !root.confirm-delete;
+                        clicked => {
+                            if root.confirm-delete { root.delete(); } else { root.confirm-delete = true; }
+                        }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    ActionButton { text: "Cancel"; ghost: true; clicked => { root.cancel(); } }
+                    ActionButton { text: "Save"; primary: true; clicked => { root.save(); } }
+                }
             }
         }
     }

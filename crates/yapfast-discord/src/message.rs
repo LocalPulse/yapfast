@@ -1127,6 +1127,8 @@ pub struct Names {
     members: HashSet<(Id, Id)>,
     /// Avatar hashes by user id, of those who set one.
     avatars: HashMap<Id, String>,
+    /// Avatar decorations' assets by user id, of those who wear one.
+    decorations: HashMap<Id, String>,
     /// Server avatar hashes by server and user id.
     member_avatars: HashMap<(Id, Id), String>,
     /// Members' roles by server and user id, for the colour of their name.
@@ -1307,7 +1309,29 @@ impl Names {
             Some(Value::Null) => learned |= changed(&mut self.avatars, id, None),
             _ => {}
         }
+        // Partial user objects leave the decoration out too; null takes it off.
+        match user.get("avatar_decoration_data") {
+            Some(Value::Object(decoration)) => {
+                let asset = decoration
+                    .get("asset")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned);
+                learned |= changed(&mut self.decorations, id, asset);
+            }
+            Some(Value::Null) => learned |= changed(&mut self.decorations, id, None),
+            _ => {}
+        }
         self.version += u64::from(known && learned);
+    }
+
+    /// The address of the decoration Discord draws over a user's avatar,
+    /// if they wear one: still, as lists show it.
+    pub fn decoration(&self, user: &str) -> Option<String> {
+        let asset = self.decorations.get(&id(user)?)?;
+        Some(format!(
+            "{}/avatar-decoration-presets/{asset}.png?size=96&passthrough=false",
+            ready::cdn()
+        ))
     }
 
     /// Learns a member object; its user id is in `user` or `user_id`.
@@ -2520,6 +2544,18 @@ mod tests {
         assert!(!own.mentions_me(me, Some(&server)));
         // A DM has no server: @everyone means nothing there.
         assert!(!message(json!({"mention_everyone": true})).mentions_me(me, None));
+    }
+
+    #[test]
+    fn names_learn_and_drop_avatar_decorations() {
+        let mut names = Names::default();
+        names.learn_user(&json!({"id": "2", "username": "ann", "avatar_decoration_data": {"asset": "a_ring", "sku_id": "1"}}));
+        assert!(names.decoration("2").is_some_and(|url| url.ends_with("/avatar-decoration-presets/a_ring.png?size=96&passthrough=false")));
+        // A partial user leaves it be; null takes it off.
+        names.learn_user(&json!({"id": "2"}));
+        assert!(names.decoration("2").is_some());
+        names.learn_user(&json!({"id": "2", "avatar_decoration_data": null}));
+        assert_eq!(names.decoration("2"), None);
     }
 
     #[test]

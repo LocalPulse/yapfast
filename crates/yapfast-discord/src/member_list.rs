@@ -25,6 +25,8 @@ pub struct ListedMember {
     pub username: Option<String>,
     /// The address of the avatar Discord shows for them on this server.
     pub avatar: String,
+    /// The address of the decoration over it, if they wear one.
+    pub decoration: Option<String>,
     /// The heading they're listed under, with its size, such as `Mods — 2`.
     pub group: String,
     pub presence: Presence,
@@ -308,6 +310,7 @@ impl MemberList {
                             .to_owned(),
                         username: names.username(user).map(str::to_owned),
                         avatar: names.avatar(Some(&self.guild), user),
+                        decoration: names.decoration(user),
                         group: group
                             .as_ref()
                             .map(|(_, heading)| heading.clone())

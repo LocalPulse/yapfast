@@ -661,6 +661,8 @@ pub struct ProfileBadge {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ProfileConnection {
     pub kind: String,
+    /// The account's id on that service.
+    pub id: String,
     pub name: String,
     pub verified: bool,
 }
@@ -719,6 +721,8 @@ pub struct ChatMember {
     pub role: Role,
     /// The address of their avatar; see [`DiscordCommand::Pictures`].
     pub avatar: Option<String>,
+    /// The address of the decoration over their avatar, on Discord.
+    pub avatar_decoration: Option<String>,
     /// The heading Discord lists them under, with its size, such as
     /// `Online — 12`. Matrix members are grouped by `role` instead.
     pub group: Option<String>,
@@ -1522,6 +1526,8 @@ pub struct ChatMessage {
     pub spoilers: bool,
     /// The address of the author's avatar; see [`DiscordCommand::Pictures`].
     pub avatar: Option<String>,
+    /// The address of the decoration over the author's avatar, on Discord.
+    pub avatar_decoration: Option<String>,
     /// The RGB colour of the author's name, from their highest coloured
     /// Discord role.
     pub color: Option<u32>,

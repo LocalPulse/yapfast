@@ -185,6 +185,7 @@ export component ActiveNowColumn inherits Rectangle {
     callback open-person(string, length, length);
     background: Theme.panel;
     border-width: 0px;
+    clip: true;
     Rectangle { x: 0px; width: 1px; background: Theme.line; }
     VerticalLayout {
         padding: 16px; padding-right: 12px; spacing: 16px;
@@ -197,9 +198,12 @@ export component ActiveNowColumn inherits Rectangle {
                 color: Theme.muted; font-size: 13px; horizontal-alignment: center; wrap: word-wrap;
             }
         }
-        ScrollView {
+        cards-view := ScrollView {
             vertical-stretch: 1;
+            content-width: self.visible-width;
+            horizontal-scrollbar-policy: always-off;
             VerticalLayout {
+                width: cards-view.visible-width;
                 spacing: 12px; alignment: start;
                 for card in root.cards: ActiveCard {
                     card: card;
