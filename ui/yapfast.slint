@@ -723,6 +723,8 @@ export component YapfastWindow inherits Window {
     in property <string> voice-time;
     in property <string> voice-name;
     in property <string> voice-detail;
+    /// The call's channel, by room id; empty outside a call.
+    in property <string> voice-call-room;
     in property <string> voice-microphone-status;
     in property <string> voice-description;
     in property <string> voice-error;
@@ -2291,6 +2293,8 @@ export component YapfastWindow inherits Window {
                 // rail's axis, 36px from the left; names and status start at 64px.
                 if root.voice-visible: VoiceDock {
                     voice-status: root.voice-status; voice-time: root.voice-time; voice-detail: root.voice-detail; voice-name: root.voice-name;
+                    call-room: root.voice-call-room;
+                    open-call-room(room) => { root.open-conversation(room); }
                     voice-color: root.voice-color;
                     voice-active: root.voice-active; voice-ready: root.voice-ready; voice-leaving: root.voice-leaving;
                     voice-warning: root.voice-warning; voice-error: root.voice-error;
@@ -3079,6 +3083,9 @@ export component YapfastWindow inherits Window {
                                 open(id) => { root.select-room(id); }
                             }
                             if root.friends-open: FriendsScreen {
+                                // At the left, with Active Now at the right; without an
+                                // x it centred in what was left, leaving a gap.
+                                x: 0px; y: 0px;
                                 width: parent.width - (parent.width >= 1000px ? 360px : 0px); height: parent.height;
                                 rows: root.friends-all ? root.friends : root.friends-online;
                                 all: root.friends-all; total: root.friend-count;
@@ -3090,7 +3097,7 @@ export component YapfastWindow inherits Window {
                                 open-friend-menu(id, x, y) => { root.open-context-menu(id, true, x, y); }
                             }
                             if root.friends-open && parent.width >= 1000px: ActiveNowColumn {
-                                x: parent.width - self.width; width: 360px; height: parent.height;
+                                x: parent.width - self.width; y: 0px; width: 360px; height: parent.height;
                                 cards: root.active-now;
                                 open-room(room) => { root.open-conversation(room); }
                                 open-person(id, x, y) => { root.open-context-menu(id, true, x, y); }

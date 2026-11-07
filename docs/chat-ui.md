@@ -437,7 +437,7 @@ The window follows Discord's arrangement:
   after it. A pinned
   DM stays at the top of the list, with a pin, on this device. Below those,
   DMs pinned in categories show as Vencord's PinDMs plugin shows them: each
-  category under its name in its colour, its DMs in their order, then the
+  category under its name in its colour, its DMs the one talked in last first, then the
   other DMs under "Direct Messages"; each heading folds, and a folded one
   keeps its unread and selected DMs showing. The first time a Discord
   account shows, Yapfast takes the categories PinDMs keeps for it in

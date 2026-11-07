@@ -509,6 +509,11 @@ export component ProfileCard inherits Rectangle {
                             size: root.avatar-size; initial: root.data.initial; tint: root.data.tint; picture: root.data.picture;
                             decoration-url: root.data.decoration-url;
                         }
+                        // The card's avatar opens the full profile, as its name did.
+                        if !root.large && !root.preview: TouchArea {
+                            mouse-cursor: MouseCursor.pointer;
+                            clicked => { root.enlarge(); }
+                        }
                         if root.data.presence != "" && root.data.presence != "offline": StatusDot {
                             x: parent.width - self.width - (root.large ? 14px : 10px); y: parent.height - self.height - (root.large ? 14px : 10px);
                             presence: root.data.presence; ring: Theme.sidebar;
@@ -534,16 +539,25 @@ export component ProfileCard inherits Rectangle {
                                 source: root.data.nameplate; image-fit: fill;
                                 accessible-role: image; accessible-label: "Nameplate";
                             }
-                            name-text := Text {
+                            // Selectable, to copy: the full profile opens from the avatar.
+                            name-text := TextInput {
                                 width: parent.width;
                                 text: root.data.name; color: Theme.text; font-size: root.large ? 26px : 20px; font-weight: 700;
-                                overflow: elide;
-                                if !root.large && !root.preview: TouchArea { mouse-cursor: MouseCursor.pointer; clicked => { root.enlarge(); } }
+                                read-only: true; single-line: true;
+                                selection-background-color: Theme.accent.with-alpha(0.35);
+                                selection-foreground-color: Theme.text;
+                                accessible-label: "Name";
                             }
                         }
                         if root.data.handle != "": HorizontalLayout {
                             spacing: 6px; alignment: start;
-                            Text { text: root.data.handle; color: Theme.secondary; font-size: 14px; font-weight: 500; overflow: elide; vertical-alignment: center; }
+                            TextInput {
+                                text: root.data.handle; color: Theme.secondary; font-size: 14px; font-weight: 500; vertical-alignment: center;
+                                read-only: true; single-line: true;
+                                selection-background-color: Theme.accent.with-alpha(0.35);
+                                selection-foreground-color: Theme.text;
+                                accessible-label: "Username";
+                            }
                             // The server tag, a chip as wide as its badge and
                             // letters, beside the handle, as in Discord.
                             if root.data.server-tag != "": VerticalLayout {

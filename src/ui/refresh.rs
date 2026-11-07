@@ -723,13 +723,15 @@ impl Adapter {
                 room.category != discord::REQUESTS && room.category != discord::SPAM
             });
             // Pinned DMs come first, in the order they were pinned; then
-            // each category of pinned DMs, as Vencord's PinDMs orders them;
-            // then the rest, newest first as before.
+            // each category of pinned DMs in its place, its DMs as the rest
+            // are, the one talked in last first, as PinDMs' "most recent"
+            // order; then the rest. The sort keeps the list's newest-first
+            // order within each.
             listed.sort_by_key(
                 |room| match state.pinned.iter().position(|id| *id == room.id) {
                     Some(at) => (0, 0, at),
                     None => match super::pin_dms::place(pin_categories, &room.id) {
-                        Some((category, at)) => (1, category, at),
+                        Some((category, _)) => (1, category, 0),
                         None => (2, 0, 0),
                     },
                 },
@@ -3447,6 +3449,15 @@ impl Adapter {
             Phase::Disconnected => 2,
             _ => 0,
         });
+        window.set_voice_call_room(
+            state
+                .voice
+                .room
+                .as_deref()
+                .filter(|_| voice.active())
+                .unwrap_or_default()
+                .into(),
+        );
         window.set_voice_detail(
             if state.preview {
                 format!("{} · Sample", voice.name)
