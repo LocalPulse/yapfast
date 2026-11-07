@@ -427,8 +427,8 @@ export enum CardRowKind { text, media, separator, buttons, select, unknown }
 /// A row of a Discord app's card, of one `kind`, with the fields it uses:
 /// text and what a section shows beside it; pictures in a gallery and file
 /// cards; a gap, `large`, with or without a `divider`; buttons; or a menu
-/// by what it shows, which doesn't open; or a note that Yapfast can't show
-/// some components.
+/// by what it shows, which opens by its `menu-id` when that isn't empty; or
+/// a note that Yapfast can't show some components.
 export struct CardRow {
     kind: CardRowKind,
     blocks: [TextBlock],
@@ -437,7 +437,7 @@ export struct CardRow {
     images: [ImageCell], gallery-width: int, gallery-height: int, files: [FileCell],
     divider: bool, large: bool,
     buttons: [CardButton],
-    select: string,
+    select: string, menu-id: string,
 }
 /// A container of a Discord message's components, framed with a bar of its
 /// colour, or the components outside one.
@@ -1476,6 +1476,8 @@ export component CardView inherits HorizontalLayout {
     callback open-link(string);
     /// A button of the message's item, by its custom id.
     callback press-button(string, string);
+    /// A menu of the message's item opens, by its custom id, beside this place.
+    callback open-card-menu(string, string, length, length, length, length);
     callback reveal-attachment(string, int);
     callback view-image(string, int);
     callback save-attachment(string, int);
@@ -1552,15 +1554,26 @@ export component CardView inherits HorizontalLayout {
                     for button in row.buttons: CardButtonView { button: button; open-link(link) => { root.open-link(link); } press(id) => { root.press-button(root.item, id); } }
                 }
                 if row.kind == CardRowKind.select: HorizontalLayout {
-                    // It doesn't open, so it shows as disabled.
+                    // One that can't open shows as disabled.
                     Rectangle {
-                        max-width: 400px; horizontal-stretch: 100; height: 40px; border-radius: 8px; opacity: 0.5;
-                        background: Theme.field; border-width: 1px; border-color: Theme.edge;
-                        accessible-role: combobox; accessible-label: row.select; accessible-enabled: false;
+                        max-width: 400px; horizontal-stretch: 100; height: 40px; border-radius: 8px;
+                        opacity: row.menu-id != "" ? 1 : 0.5;
+                        background: select-touch.has-hover && row.menu-id != "" ? Theme.hover : Theme.field;
+                        border-width: 1px; border-color: Theme.edge;
+                        accessible-role: combobox; accessible-label: row.select; accessible-enabled: row.menu-id != "";
+                        accessible-action-default => {
+                            if row.menu-id != "" { root.open-card-menu(root.item, row.menu-id, self.absolute-position.x, self.absolute-position.y, self.width, self.height); }
+                        }
                         HorizontalLayout {
                             padding-left: 12px; padding-right: 12px; spacing: 8px;
                             Text { text: row.select; color: Theme.secondary; font-weight: 500; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
                             Image { source: @image-url("icons/chevron-down.svg"); width: 18px; image-fit: contain; colorize: Theme.secondary; }
+                        }
+                        select-touch := TouchArea {
+                            mouse-cursor: row.menu-id != "" ? MouseCursor.pointer : MouseCursor.default;
+                            clicked => {
+                                if row.menu-id != "" { root.open-card-menu(root.item, row.menu-id, self.absolute-position.x, self.absolute-position.y, self.width, self.height); }
+                            }
                         }
                     }
                     Rectangle { horizontal-stretch: 1; }
@@ -2008,6 +2021,7 @@ export component MessageContent inherits VerticalLayout {
     callback open-thread(string);
     callback react(string, string);
     callback press-button(string, string);
+    callback open-card-menu(string, string, length, length, length, length);
     callback retry(string);
     callback cancel-send(string);
     callback reveal-attachment(string, int);
@@ -2169,6 +2183,7 @@ export component MessageContent inherits VerticalLayout {
                 message-font-size: root.message-font-size;
                 open-link(link) => { root.open-link(link); }
                 press-button(item, id) => { root.press-button(item, id); }
+                open-card-menu(item, id, x, y, width, height) => { root.open-card-menu(item, id, x, y, width, height); }
                 reveal-attachment(id, index) => { root.reveal-attachment(id, index); }
                 view-image(id, index) => { root.view-image(id, index); }
                 save-attachment(id, index) => { root.save-attachment(id, index); }

@@ -42,6 +42,7 @@ import { ChannelSettingsPrompt, ChannelSettingsScreen, OverwriteRow, ThreeStateR
 import { MfaChoice, MfaPrompt, MfaDialog } from "mfa.slint";
 import { FoundRow, PickRow, ThreadRow, HeaderSearch, PinsPopover, ThreadsPopover, AddPeoplePopover, SearchPanel, TopicPopover } from "header.slint";
 import { ThreadPanel, NewThreadPanel } from "thread.slint";
+import { AppModalDialog, AppMenuPopup, ModalFieldRow, ModalOptionRow } from "app_modal.slint";
 import { PostTag, PostRow, PostTagChoice, ForumPanel } from "forum.slint";
 import { BrowseRow, BrowseScreen } from "browse.slint";
 
@@ -56,6 +57,7 @@ export { EmojiCell, EmojiRow, EmojiSection, EmojiCard, ReactionChip, ImageCell, 
 export { MemberRow, ProfileBadge, ProfileConnection, ProfileEffect, ProfileRole, ProfileRoleRow, ProfileServerRow, ProfileFriendRow, ProfileData, ActivityRow, ActivityClock } from "people.slint";
 export { RequestRow, FriendRow } from "friends.slint";
 export { ContactRow, PlaceRow, ReactionPill, ReactorRow, PollAnswerDraft } from "dialogs.slint";
+export { ModalFieldKind, ModalFieldRow, ModalOptionRow } from "app_modal.slint";
 export { FoundRow, PickRow } from "header.slint";
 export { GifTile, GifFavorites } from "gifs.slint";
 
@@ -922,6 +924,32 @@ export component YapfastWindow inherits Window {
     callback close-post;
     callback leave-post;
     callback stay-post;
+    // A Discord app's form; see AppModalDialog.
+    in property <bool> app-modal-open;
+    in property <string> app-modal-title;
+    in property <[ModalFieldRow]> app-modal-fields;
+    in property <bool> app-modal-can-submit;
+    in property <bool> app-modal-sending;
+    in property <string> app-modal-problem;
+    callback app-modal-text(int, string);
+    callback app-modal-pick(int, string);
+    callback app-modal-submit;
+    callback app-modal-close;
+    // A Discord app's menu on a message, open beside it; see AppMenuPopup.
+    in property <bool> app-menu-open;
+    in property <[ModalOptionRow]> app-menu-options;
+    in property <bool> app-menu-multi;
+    in property <int> app-menu-min;
+    in property <int> app-menu-max;
+    in property <int> app-menu-picked-count;
+    /// Where the menu opened: under the menu's box, as wide.
+    property <length> app-menu-x;
+    property <length> app-menu-y;
+    property <length> app-menu-width;
+    callback open-app-menu(string, string);
+    callback app-menu-pick(string);
+    callback app-menu-done;
+    callback app-menu-close;
     // Making a poll; see PollDialog.
     /// Polls can be made in the open conversation.
     in property <bool> can-create-polls;
@@ -1359,7 +1387,7 @@ export component YapfastWindow inherits Window {
         || root.switcher-open || root.mfa-open || root.add-friend-open || root.invite-open
         || root.join-open || root.event-open || root.gift-open || root.oauth-open
         || root.channel-open || root.move-sync-open || root.leave-open || root.person-open
-        || root.status-open || root.poll-open || root.new-dm-open || root.reactions-open
+        || root.status-open || root.poll-open || root.app-modal-open || root.new-dm-open || root.reactions-open
         || root.forward-open || root.leaving-link != "" || root.switch-prompt != ""
         || root.confirm-delete != "" || root.incoming-open;
     // The channel has no composer here: a call, a forum, a message request, the
@@ -2902,6 +2930,10 @@ export component YapfastWindow inherits Window {
                                                         open-thread(room) => { root.open-aside(room); }
                                                         react(item, key) => { root.react(item, key); }
                                                         press-button(item, id) => { root.press-button(item, id); }
+                                                        open-card-menu(item, id, x, y, width, height) => {
+                                                            root.app-menu-x = x; root.app-menu-y = y + height + 4px; root.app-menu-width = width;
+                                                            root.open-app-menu(item, id);
+                                                        }
                                                         retry(item) => { root.retry(item); }
                                                         cancel-send(item) => { root.cancel-send(item); }
                                                         reveal-attachment(id, index) => { root.reveal-attachment(id, index); }
@@ -3337,6 +3369,10 @@ export component YapfastWindow inherits Window {
                         edit(item) => { root.edit(item); }
                         react(item, key) => { root.react(item, key); }
                         press-button(item, id) => { root.press-button(item, id); }
+                        open-card-menu(item, id, x, y, width, height) => {
+                            root.app-menu-x = x; root.app-menu-y = y + height + 4px; root.app-menu-width = width;
+                            root.open-app-menu(item, id);
+                        }
                         open-picker(item, x, y, width, height) => { root.anchor(x, y, width, height, false); root.open-picker(item); }
                         open-menu(message, x, y, width, height) => { root.anchor(x, y, width, height, width == 0px); root.open-menu(message); root.menu-aside = true; root.aside-composer-last = true; }
                         open-media-menu(message, index, video, x, y) => { root.anchor(x, y, 0px, 0px, true); root.open-message-menu(message, index, video); root.menu-aside = true; root.aside-composer-last = true; }
@@ -4046,6 +4082,34 @@ export component YapfastWindow inherits Window {
         save-status => { root.save-status(); }
         clear-status => { root.clear-status(); }
         close-status => { root.close-status(); }
+    }
+    // A Discord app's menu on a message, under its box; a click outside
+    // closes it.
+    if root.app-menu-open: TouchArea {
+        clicked => { root.app-menu-close(); }
+    }
+    if root.app-menu-open: AppMenuPopup {
+        width: max(220px, root.app-menu-width);
+        x: min(root.app-menu-x, root.width - self.width - 8px);
+        // It opens above the box when there's no room below.
+        y: root.app-menu-y + self.height + 8px > root.height ? max(8px, root.app-menu-y - self.height - 52px) : root.app-menu-y;
+        height: min(320px, root.app-menu-options.length * 40px + (root.app-menu-multi ? 52px : 12px));
+        options: root.app-menu-options; multi: root.app-menu-multi;
+        min-values: root.app-menu-min; max-values: root.app-menu-max; picked-count: root.app-menu-picked-count;
+        pick(value) => { root.app-menu-pick(value); }
+        done => { root.app-menu-done(); }
+        close => { root.app-menu-close(); }
+    }
+    // A Discord app's form; see AppModalDialog.
+    app-modal-motion := PopupMotion { open: root.app-modal-open; }
+    if app-modal-motion.shown: AppModalDialog {
+        motion: app-modal-motion.amount;
+        title: root.app-modal-title; fields: root.app-modal-fields;
+        can-submit: root.app-modal-can-submit; sending: root.app-modal-sending; problem: root.app-modal-problem;
+        text-edited(index, text) => { root.app-modal-text(index, text); }
+        pick(index, value) => { root.app-modal-pick(index, value); }
+        submit => { root.app-modal-submit(); }
+        close => { root.app-modal-close(); }
     }
     // Making a poll; see PollDialog.
     poll-motion := PopupMotion { open: root.poll-open; }

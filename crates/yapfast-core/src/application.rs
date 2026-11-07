@@ -31,6 +31,7 @@ mod join;
 mod members;
 mod messages;
 mod mfa;
+mod modals;
 mod new_post;
 mod oauth;
 mod place_search;
@@ -61,6 +62,7 @@ pub use members::{BAN_HISTORY, RoleChoice, TIMEOUT_TIMES};
 #[cfg(all(feature = "discord", any(test, feature = "test-fixtures")))]
 pub use members::{member_server, with_clubs};
 pub use mfa::MfaPrompt;
+pub use modals::{ModalForm, OpenMenu};
 pub use new_post::{NewPost, POST_TAGS, POST_TITLE_LIMIT};
 pub use oauth::OAuthDialog;
 pub use place_search::Place;
@@ -602,6 +604,10 @@ pub struct AppState {
     pub confirm_end_poll: Option<String>,
     /// The poll being made, while its dialog is open.
     pub poll_draft: Option<PollDraft>,
+    /// A Discord app's form being filled in, while it's open.
+    pub modal: Option<ModalForm>,
+    /// A Discord app's menu on a message, while it's open.
+    pub open_menu: Option<OpenMenu>,
     /// A message being forwarded, while its dialog is open.
     pub forwarding: Option<Forwarding>,
     pub places_used: PlacesUsed,
@@ -1344,6 +1350,35 @@ pub enum Action {
         item: String,
         custom_id: String,
     },
+    /// Pick `values` from a Discord app's menu on an item.
+    PickOptions {
+        item: String,
+        custom_id: String,
+        values: Vec<String>,
+    },
+    /// Type in a field of the app's form that's open.
+    ModalText {
+        field: usize,
+        text: String,
+    },
+    /// Pick an option of a menu of the app's form, or take it back: a menu
+    /// of one swaps it in.
+    ModalPick {
+        field: usize,
+        value: String,
+    },
+    SubmitModal,
+    CloseModal,
+    /// Open a Discord app's menu on an item, by its custom id.
+    OpenMenu {
+        item: String,
+        custom_id: String,
+    },
+    /// Pick an option of the menu open: a menu of one sends it at once; a
+    /// menu of several picks it, or takes it back, until [`Action::MenuDone`].
+    MenuPick(String),
+    MenuDone,
+    CloseMenu,
     RequestDelete(String),
     /// Delete a message without asking first, as Shift and a click on its
     /// Delete do in Discord's client.
@@ -2635,6 +2670,25 @@ impl Application {
             }
             Action::React { item, key } => self.react(item, key),
             Action::PressButton { item, custom_id } => self.press_button(item, custom_id),
+            Action::PickOptions {
+                item,
+                custom_id,
+                values,
+            } => self.pick_options(item, custom_id, values),
+            Action::ModalText { field, text } => self.modal_text(field, text),
+            Action::ModalPick { field, value } => self.modal_pick(field, value),
+            Action::SubmitModal => self.submit_modal(),
+            Action::CloseModal => {
+                self.state.modal = None;
+                vec![]
+            }
+            Action::OpenMenu { item, custom_id } => self.open_menu(item, custom_id),
+            Action::MenuPick(value) => self.menu_pick(value),
+            Action::MenuDone => self.menu_done(),
+            Action::CloseMenu => {
+                self.state.open_menu = None;
+                vec![]
+            }
             Action::RequestDelete(item) => self.request_delete(item),
             Action::DeleteNow(item) => self.delete_now(item),
             Action::Vote { item, answers } => self.vote(item, answers),
@@ -3815,6 +3869,11 @@ impl Application {
             }
             Event::Forwarded { room, result } => self.forwarded(room, result),
             Event::PollPosted { room, result } => self.poll_posted(room, result),
+            Event::Modal(modal) => self.state.modal = Some(ModalForm::new(modal)),
+            Event::ModalSubmitted(result) => self.modal_submitted(result),
+            Event::InteractionFailed => {
+                self.state.notice = Some("This interaction failed.".into());
+            }
             Event::Draft { room, body } => {
                 // Text typed since opening the room wins over the saved draft.
                 if self.state.drafts.get(&room).is_none_or(String::is_empty)

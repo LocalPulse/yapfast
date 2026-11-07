@@ -610,7 +610,7 @@ impl Matrix {
             // Yapfast pins only Discord's messages.
             Command::Pin { .. } => {}
             // Only Discord's apps have buttons.
-            Command::PressButton { .. } => {}
+            Command::PressButton { .. } | Command::PickOptions { .. } => {}
             // Matrix's attachments have no address, which copying asks for.
             Command::CopyAttachment { .. } => {}
             Command::Delete { room, item } => {

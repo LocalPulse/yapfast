@@ -198,6 +198,7 @@ pub(super) fn bind_callbacks(window: &YapfastWindow, adapter: &Rc<RefCell<Adapte
     super::games::bind(window, adapter);
     super::gifs::bind(window, adapter);
     super::polls::bind(window, adapter);
+    super::app_forms::bind(window, adapter);
     super::call_link::bind(window, adapter);
     super::server_settings::bind(window, adapter);
     super::channel_settings::bind(window, adapter);

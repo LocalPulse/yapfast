@@ -36,6 +36,7 @@ use yapfast_core::{
 use crate::drop::Drag;
 use crate::{autostart, custom_emoji, emoji, emoji_text, graphics, zoom};
 
+mod app_forms;
 mod appearance;
 mod away;
 mod browser;
@@ -1443,6 +1444,9 @@ struct Models {
     reactor_rows: Rc<VecModel<ReactorRow>>,
     /// The answers of the poll being made.
     poll_answers: Rc<VecModel<PollAnswerDraft>>,
+    /// The fields of a Discord app's form, and the options of its menu open.
+    app_modal_fields: Rc<VecModel<ModalFieldRow>>,
+    app_menu_options: Rc<VecModel<ModalOptionRow>>,
     search_results: Rc<VecModel<FoundRow>>,
     add_people: Rc<VecModel<PickRow>>,
     role_members: Rc<VecModel<MemberRow>>,
@@ -1510,6 +1514,8 @@ impl Models {
         window.set_reaction_pills(ModelRc::from(self.reaction_pills.clone()));
         window.set_reactor_rows(ModelRc::from(self.reactor_rows.clone()));
         window.set_poll_answers(ModelRc::from(self.poll_answers.clone()));
+        window.set_app_modal_fields(ModelRc::from(self.app_modal_fields.clone()));
+        window.set_app_menu_options(ModelRc::from(self.app_menu_options.clone()));
         window.set_search_results(ModelRc::from(self.search_results.clone()));
         window.set_add_people(ModelRc::from(self.add_people.clone()));
         window.set_role_members(ModelRc::from(self.role_members.clone()));

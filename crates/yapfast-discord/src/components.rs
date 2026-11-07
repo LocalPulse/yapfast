@@ -21,7 +21,8 @@ pub const IS_COMPONENTS_V2: u64 = 1 << 15;
 
 const ACTION_ROW: u64 = 1;
 const BUTTON: u64 = 2;
-const STRING_SELECT: u64 = 3;
+pub const STRING_SELECT: u64 = 3;
+const TEXT_INPUT: u64 = 4;
 const USER_SELECT: u64 = 5;
 const ROLE_SELECT: u64 = 6;
 const MENTIONABLE_SELECT: u64 = 7;
@@ -64,6 +65,18 @@ impl Card {
         })
     }
 
+    /// Its menus that open, and whether each is disabled.
+    pub fn menus(&self) -> impl Iterator<Item = (&Menu, bool)> {
+        self.rows.iter().filter_map(|row| match row {
+            Row::Select {
+                menu: Some(menu),
+                disabled,
+                ..
+            } => Some((menu, *disabled)),
+            _ => None,
+        })
+    }
+
     /// The Markdown of its texts, in order.
     pub fn texts(&self) -> impl Iterator<Item = &str> {
         self.rows.iter().filter_map(|row| match row {
@@ -91,13 +104,64 @@ pub enum Row {
     },
     Buttons(Vec<Button>),
     /// A menu, by what it shows before it's opened: the options picked by
-    /// default, or its placeholder.
+    /// default, or its placeholder; and what it offers, for one that opens.
     Select {
         text: String,
         disabled: bool,
+        #[serde(default)]
+        menu: Option<Menu>,
     },
     /// Components of a kind Yapfast can't show, one or more.
     Unknown,
+}
+
+/// A select menu an app put on a message, which picking from asks the app.
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Menu {
+    pub custom_id: String,
+    /// Its component type: [`STRING_SELECT`] offers `options`; the others
+    /// pick users, roles, both, or channels, which Yapfast can't offer yet.
+    pub kind: u64,
+    pub options: Vec<MenuOption>,
+    /// How many may be picked: Discord's defaults are one and one.
+    pub min_values: u32,
+    pub max_values: u32,
+}
+
+impl Menu {
+    /// It offers its own options, which Yapfast can show.
+    pub fn of_options(&self) -> bool {
+        self.kind == STRING_SELECT
+    }
+
+    /// `values` are a pick it takes: as many as it allows, each one of its
+    /// options, none twice.
+    pub fn allows(&self, values: &[String]) -> bool {
+        let count = u32::try_from(values.len()).unwrap_or(u32::MAX);
+        let known = values
+            .iter()
+            .all(|value| self.options.iter().any(|option| option.value == *value));
+        let distinct = values
+            .iter()
+            .enumerate()
+            .all(|(index, value)| !values[..index].contains(value));
+        self.of_options()
+            && (self.min_values..=self.max_values).contains(&count)
+            && known
+            && distinct
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct MenuOption {
+    pub label: String,
+    /// What picking it sends.
+    pub value: String,
+    pub description: Option<String>,
+    /// In Discord's markup, as a button's.
+    pub emoji: Option<String>,
+    /// Picked before anyone picks.
+    pub default: bool,
 }
 
 /// What a section shows beside its text.
@@ -289,19 +353,7 @@ fn button(component: &Value) -> Option<Button> {
         5 => Style::Link,
         _ => return None,
     };
-    let emoji = &component["emoji"];
-    let emoji = match (emoji["id"].as_str(), emoji["name"].as_str()) {
-        (Some(id), name) => {
-            let prefix = if emoji["animated"].as_bool().unwrap_or(false) {
-                "a"
-            } else {
-                ""
-            };
-            Some(format!("<{prefix}:{}:{id}>", name.unwrap_or("emoji")))
-        }
-        (None, Some(name)) => Some(name.to_owned()),
-        (None, None) => None,
-    };
+    let emoji = emoji(&component["emoji"]);
     let label = component["label"].as_str().unwrap_or_default().to_owned();
     if label.is_empty() && emoji.is_none() {
         return None;
@@ -319,6 +371,57 @@ fn button(component: &Value) -> Option<Button> {
             .as_str()
             .filter(|id| style != Style::Link && !id.is_empty())
             .map(str::to_owned),
+    })
+}
+
+/// A component's emoji in Discord's markup: the emoji itself, or
+/// `<:name:id>` for a custom one.
+fn emoji(emoji: &Value) -> Option<String> {
+    match (emoji["id"].as_str(), emoji["name"].as_str()) {
+        (Some(id), name) => {
+            let prefix = if emoji["animated"].as_bool().unwrap_or(false) {
+                "a"
+            } else {
+                ""
+            };
+            Some(format!("<{prefix}:{}:{id}>", name.unwrap_or("emoji")))
+        }
+        (None, Some(name)) => Some(name.to_owned()),
+        (None, None) => None,
+    }
+}
+
+/// A select menu's options and limits, when it has a custom id.
+fn menu(component: &Value) -> Option<Menu> {
+    let custom_id = component["custom_id"]
+        .as_str()
+        .filter(|id| !id.is_empty())?;
+    let count = |field: &str, default: u32| {
+        component[field]
+            .as_u64()
+            .and_then(|count| u32::try_from(count).ok())
+            .unwrap_or(default)
+    };
+    let options = component["options"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|option| {
+            Some(MenuOption {
+                label: option["label"].as_str()?.to_owned(),
+                value: option["value"].as_str()?.to_owned(),
+                description: option["description"].as_str().map(str::to_owned),
+                emoji: emoji(&option["emoji"]),
+                default: option["default"].as_bool().unwrap_or(false),
+            })
+        })
+        .collect();
+    Some(Menu {
+        custom_id: custom_id.to_owned(),
+        kind: component["type"].as_u64().unwrap_or(STRING_SELECT),
+        options,
+        min_values: count("min_values", 1),
+        max_values: count("max_values", 1).max(1),
     })
 }
 
@@ -342,6 +445,7 @@ fn select(component: &Value) -> Row {
     Row::Select {
         text,
         disabled: component["disabled"].as_bool().unwrap_or(false),
+        menu: menu(component),
     }
 }
 
@@ -398,11 +502,241 @@ fn file(component: &Value, slot: usize, spoiler: bool) -> Option<Attachment> {
     })
 }
 
+const LABEL: u64 = 18;
+
+/// A form an app opened in answer to a press, from
+/// INTERACTION_MODAL_CREATE: text inputs and menus, each under its label.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Modal {
+    /// The interaction that opened it, which the answer names.
+    pub id: String,
+    pub application_id: String,
+    pub channel_id: String,
+    pub custom_id: String,
+    pub title: String,
+    pub fields: Vec<ModalField>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ModalField {
+    /// Above it: a Label's, or an old text input's own.
+    pub label: String,
+    pub description: Option<String>,
+    pub kind: FieldKind,
+    /// It came inside a Label, as the answer sends it back; otherwise in an
+    /// action row, as modals were made before Labels.
+    pub labelled: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FieldKind {
+    Text {
+        custom_id: String,
+        /// Several lines.
+        paragraph: bool,
+        placeholder: Option<String>,
+        /// What it starts with.
+        value: String,
+        min_length: u32,
+        max_length: u32,
+        required: bool,
+    },
+    Select {
+        menu: Menu,
+        placeholder: Option<String>,
+        required: bool,
+    },
+    /// Markdown the form shows between its fields.
+    Note(String),
+}
+
+impl Default for FieldKind {
+    fn default() -> Self {
+        Self::Note(String::new())
+    }
+}
+
+/// What's filled in for a field of a [`Modal`], in its order.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FieldValue {
+    Text(String),
+    Picked(Vec<String>),
+    /// A note, which answers nothing.
+    None,
+}
+
+/// The form in INTERACTION_MODAL_CREATE's data; none without its ids.
+pub fn modal(data: &Value) -> Option<Modal> {
+    let string = |value: &Value| value.as_str().unwrap_or_default().to_owned();
+    let mut fields = Vec::new();
+    for component in data["components"].as_array().into_iter().flatten() {
+        match component["type"].as_u64() {
+            Some(LABEL) => {
+                let inner = &component["component"];
+                if let Some(kind) = field_kind(inner) {
+                    fields.push(ModalField {
+                        label: string(&component["label"]),
+                        description: component["description"].as_str().map(str::to_owned),
+                        kind,
+                        labelled: true,
+                    });
+                }
+            }
+            Some(ACTION_ROW) => {
+                for inner in component["components"].as_array().into_iter().flatten() {
+                    if let Some(kind) = field_kind(inner) {
+                        fields.push(ModalField {
+                            label: string(&inner["label"]),
+                            description: None,
+                            kind,
+                            labelled: false,
+                        });
+                    }
+                }
+            }
+            Some(TEXT_DISPLAY) => {
+                if let Some(note) = text(component) {
+                    fields.push(ModalField {
+                        kind: FieldKind::Note(note),
+                        ..Default::default()
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+    Some(Modal {
+        id: data["id"].as_str()?.to_owned(),
+        application_id: data["application"]["id"]
+            .as_str()
+            .or_else(|| data["application_id"].as_str())?
+            .to_owned(),
+        channel_id: data["channel_id"].as_str()?.to_owned(),
+        custom_id: data["custom_id"].as_str()?.to_owned(),
+        title: string(&data["title"]),
+        fields,
+    })
+}
+
+/// A text input or menu of a modal; none for a kind Yapfast can't fill.
+fn field_kind(component: &Value) -> Option<FieldKind> {
+    let count = |field: &str, default: u32| {
+        component[field]
+            .as_u64()
+            .and_then(|count| u32::try_from(count).ok())
+            .unwrap_or(default)
+    };
+    let required = component["required"].as_bool().unwrap_or(true);
+    let placeholder = component["placeholder"].as_str().map(str::to_owned);
+    match component["type"].as_u64()? {
+        TEXT_INPUT => Some(FieldKind::Text {
+            custom_id: component["custom_id"].as_str()?.to_owned(),
+            paragraph: component["style"].as_u64() == Some(2),
+            placeholder,
+            value: component["value"].as_str().unwrap_or_default().to_owned(),
+            min_length: count("min_length", 0),
+            max_length: count("max_length", 4000),
+            required,
+        }),
+        STRING_SELECT => Some(FieldKind::Select {
+            menu: menu(component)?,
+            placeholder,
+            required,
+        }),
+        _ => None,
+    }
+}
+
+/// The components a modal's answer sends, shaped as the form came: each
+/// field in its Label, or in an action row of its own.
+pub fn modal_answer(modal: &Modal, values: &[FieldValue]) -> Value {
+    let answers = modal.fields.iter().zip(values).filter_map(|(field, value)| {
+        let inner = match (&field.kind, value) {
+            (FieldKind::Text { custom_id, .. }, FieldValue::Text(text)) => {
+                serde_json::json!({"type": TEXT_INPUT, "custom_id": custom_id, "value": text})
+            }
+            (FieldKind::Select { menu, .. }, FieldValue::Picked(values)) => {
+                serde_json::json!({"type": menu.kind, "custom_id": menu.custom_id, "values": values})
+            }
+            _ => return None,
+        };
+        Some(if field.labelled {
+            serde_json::json!({"type": LABEL, "component": inner})
+        } else {
+            serde_json::json!({"type": ACTION_ROW, "components": [inner]})
+        })
+    });
+    Value::Array(answers.collect())
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn a_modal_reads_its_fields_and_answers_in_their_shape() {
+        let modal = modal(&json!({
+            "id": "900", "channel_id": "11", "custom_id": "ticket", "title": "Open a ticket",
+            "application": {"id": "77"},
+            "components": [
+                {"type": 1, "components": [{"type": 4, "custom_id": "topic", "label": "Topic", "style": 1, "max_length": 100}]},
+                {"type": 10, "content": "Tell us **everything**."},
+                {"type": 18, "label": "Details", "description": "What happened",
+                 "component": {"type": 4, "custom_id": "details", "style": 2, "required": false, "value": "It broke"}},
+                {"type": 18, "label": "Area", "component": {"type": 3, "custom_id": "area",
+                 "options": [{"label": "Billing", "value": "billing"}, {"label": "Bugs", "value": "bugs"}]}},
+                {"type": 18, "label": "Upload", "component": {"type": 19, "custom_id": "files"}},
+            ],
+        }))
+        .unwrap();
+        assert_eq!(
+            (modal.id.as_str(), modal.application_id.as_str()),
+            ("900", "77")
+        );
+        assert_eq!(modal.title, "Open a ticket");
+        let labels: Vec<_> = modal
+            .fields
+            .iter()
+            .map(|field| (field.label.as_str(), field.labelled))
+            .collect();
+        // A file upload, which Yapfast can't fill, is left out.
+        assert_eq!(
+            labels,
+            [
+                ("Topic", false),
+                ("", false),
+                ("Details", true),
+                ("Area", true)
+            ]
+        );
+        assert_eq!(
+            modal.fields[1].kind,
+            FieldKind::Note("Tell us **everything**.".into())
+        );
+        assert!(matches!(
+            &modal.fields[2].kind,
+            FieldKind::Text { paragraph: true, required: false, value, .. } if value == "It broke"
+        ));
+        let answer = modal_answer(
+            &modal,
+            &[
+                FieldValue::Text("Refund".into()),
+                FieldValue::None,
+                FieldValue::Text("Charged twice".into()),
+                FieldValue::Picked(vec!["billing".into()]),
+            ],
+        );
+        assert_eq!(
+            answer,
+            json!([
+                {"type": 1, "components": [{"type": 4, "custom_id": "topic", "value": "Refund"}]},
+                {"type": 18, "component": {"type": 4, "custom_id": "details", "value": "Charged twice"}},
+                {"type": 18, "component": {"type": 3, "custom_id": "area", "values": ["billing"]}},
+            ])
+        );
+    }
 
     fn picture(name: &str) -> Value {
         json!({
@@ -471,7 +805,18 @@ mod tests {
                 Row::Unknown,
                 Row::Select {
                     text: "Pick one".into(),
-                    disabled: false
+                    disabled: false,
+                    menu: Some(Menu {
+                        custom_id: "pick".into(),
+                        kind: STRING_SELECT,
+                        options: vec![MenuOption {
+                            label: "A".into(),
+                            value: "a".into(),
+                            ..Default::default()
+                        }],
+                        min_values: 1,
+                        max_values: 1,
+                    }),
                 }
             ]
         );

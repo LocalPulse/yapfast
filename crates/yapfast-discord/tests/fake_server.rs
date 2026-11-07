@@ -1810,9 +1810,31 @@ async fn presses_an_apps_buttons() {
         message: deployed.id.clone(),
         message_flags: deployed.flags,
         application: deployed.application_id.clone().unwrap(),
+        component_type: 2,
         custom_id: "approve".into(),
+        values: None,
     };
-    discord.press_button(press).await.unwrap();
+    discord.press_button(press.clone()).await.unwrap();
+    // Its menu offers its options, and a pick sends their values.
+    let (menu, disabled) = deployed
+        .components
+        .iter()
+        .flat_map(|card| card.menus())
+        .next()
+        .expect("a menu");
+    assert!(!disabled && menu.of_options());
+    assert!(menu.allows(&["staging".into()]));
+    assert!(!menu.allows(&["staging".into(), "production".into()]));
+    assert!(!menu.allows(&["moon".into()]));
+    discord
+        .press_button(yapfast_discord::service::Press {
+            component_type: menu.kind,
+            custom_id: menu.custom_id.clone(),
+            values: Some(vec!["staging".into()]),
+            ..press
+        })
+        .await
+        .unwrap();
     let sent = control
         .get(format!("{server}/_control/interactions"))
         .send()
@@ -1822,9 +1844,12 @@ async fn presses_an_apps_buttons() {
         .await
         .unwrap();
     let sent: Vec<serde_json::Value> = serde_json::from_str(&sent).unwrap();
-    let [sent] = sent.as_slice() else {
-        panic!("one interaction, not {sent:?}")
+    let [sent, picked] = sent.as_slice() else {
+        panic!("two interactions, not {sent:?}")
     };
+    assert_eq!(picked["data"]["component_type"], 3);
+    assert_eq!(picked["data"]["custom_id"], "environment");
+    assert_eq!(picked["data"]["values"], serde_json::json!(["staging"]));
     assert_eq!(sent["type"], 3);
     assert_eq!(sent["guild_id"], guild.as_str());
     assert_eq!(sent["channel_id"], general.as_str());

@@ -852,6 +852,191 @@ fn an_apps_buttons_press_unless_disabled() {
 }
 
 #[test]
+fn an_apps_menus_send_a_pick_of_one_at_once_and_of_several_when_done() {
+    use crate::chat::{Card, CardMenu, CardOption, CardRow};
+    let mut app = connected();
+    let option = |value: &str, default| CardOption {
+        label: value.to_uppercase(),
+        value: value.into(),
+        description: None,
+        default,
+    };
+    let menu = |custom_id: &str, max_values, disabled| CardRow::Select {
+        text: "Pick".into(),
+        disabled,
+        menu: Some(CardMenu {
+            custom_id: custom_id.into(),
+            options: vec![option("a", false), option("b", true), option("c", false)],
+            min_values: 1,
+            max_values,
+        }),
+    };
+    app.apply(Event::Timeline {
+        room: "dm".into(),
+        messages: timeline(vec![ChatMessage {
+            cards: vec![Card {
+                framed: false,
+                color: None,
+                rows: vec![
+                    menu("one", 1, false),
+                    menu("two", 2, false),
+                    menu("off", 1, true),
+                ],
+            }],
+            ..message("d:8", false)
+        }]),
+    });
+    let open = |app: &mut Application, custom_id: &str| {
+        app.dispatch(Action::OpenMenu {
+            item: "d:8".into(),
+            custom_id: custom_id.into(),
+        })
+    };
+    let picked = |effects: &[Effect], menu: &str, expected: &[&str]| {
+        matches!(
+            effects,
+            [Effect::Backend(Command::PickOptions { item, custom_id, values, .. })]
+                if item == "d:8" && custom_id == menu && values == expected
+        )
+    };
+    // A disabled menu doesn't open.
+    open(&mut app, "off");
+    assert!(app.state.open_menu.is_none());
+    // A menu of one sends its pick and closes.
+    open(&mut app, "one");
+    assert_eq!(
+        app.state.open_menu.as_ref().unwrap().picked,
+        ["b"],
+        "the default"
+    );
+    let effects = app.dispatch(Action::MenuPick("c".into()));
+    assert!(picked(&effects, "one", &["c"]));
+    assert!(app.state.open_menu.is_none());
+    // A menu of two picks up to two, takes one back, and sends with Done.
+    open(&mut app, "two");
+    // From the default b: c joins, a waits (two are picked), b goes, b
+    // comes back.
+    for value in ["c", "a", "b", "b"] {
+        assert!(app.dispatch(Action::MenuPick(value.into())).is_empty());
+    }
+    assert_eq!(app.state.open_menu.as_ref().unwrap().picked, ["c", "b"]);
+    let effects = app.dispatch(Action::MenuDone);
+    assert!(picked(&effects, "two", &["c", "b"]));
+    assert!(app.state.open_menu.is_none());
+    // An option the menu doesn't offer goes nowhere.
+    assert!(
+        app.dispatch(Action::PickOptions {
+            item: "d:8".into(),
+            custom_id: "one".into(),
+            values: vec!["z".into()],
+        })
+        .is_empty()
+    );
+}
+
+#[test]
+fn an_apps_form_checks_its_fields_and_sends_what_was_filled_in() {
+    use crate::chat::{CardOption, ChatModal, ModalAnswer, ModalInput, ModalInputKind};
+    let mut app = connected();
+    let option = |value: &str| CardOption {
+        label: value.to_uppercase(),
+        value: value.into(),
+        description: None,
+        default: false,
+    };
+    app.apply(Event::Modal(ChatModal {
+        id: "900".into(),
+        title: "Open a ticket".into(),
+        fields: vec![
+            ModalInput {
+                label: "Topic".into(),
+                description: None,
+                kind: ModalInputKind::Text {
+                    paragraph: false,
+                    placeholder: None,
+                    value: String::new(),
+                    min_length: 3,
+                    max_length: 10,
+                    required: true,
+                },
+            },
+            ModalInput {
+                label: String::new(),
+                description: None,
+                kind: ModalInputKind::Note("Be kind".into()),
+            },
+            ModalInput {
+                label: "Area".into(),
+                description: None,
+                kind: ModalInputKind::Select {
+                    options: vec![option("billing"), option("bugs"), option("other")],
+                    placeholder: None,
+                    min_values: 1,
+                    max_values: 2,
+                    required: true,
+                },
+            },
+        ],
+    }));
+    let form = || app.state.modal.clone().expect("the form is open");
+    assert_eq!(
+        form().problem(0).as_deref(),
+        Some("This field is required.")
+    );
+    assert!(
+        app.dispatch(Action::SubmitModal).is_empty(),
+        "nothing goes unfilled"
+    );
+    app.dispatch(Action::ModalText {
+        field: 0,
+        text: "ab".into(),
+    });
+    assert_eq!(
+        app.state.modal.as_ref().unwrap().problem(0).as_deref(),
+        Some("Must be at least 3 characters long.")
+    );
+    app.dispatch(Action::ModalText {
+        field: 0,
+        text: " Refund ".into(),
+    });
+    // A menu of two takes two, and a third waits; picking one again takes
+    // it back.
+    for value in ["billing", "bugs", "other", "bugs"] {
+        app.dispatch(Action::ModalPick {
+            field: 2,
+            value: value.into(),
+        });
+    }
+    assert_eq!(
+        app.state.modal.as_ref().unwrap().answers[2],
+        ModalAnswer::Picked(vec!["billing".into()])
+    );
+    assert!(app.state.modal.as_ref().unwrap().complete());
+    assert!(matches!(
+        app.dispatch(Action::SubmitModal).as_slice(),
+        [Effect::Backend(Command::Discord(DiscordCommand::SubmitModal { id, answers }))]
+            if id == "900" && answers == &[
+                ModalAnswer::Text("Refund".into()),
+                ModalAnswer::None,
+                ModalAnswer::Picked(vec!["billing".into()]),
+            ]
+    ));
+    assert!(app.dispatch(Action::SubmitModal).is_empty(), "it goes once");
+    // A failure keeps it open to try again; success closes it.
+    app.apply(Event::ModalSubmitted(Err("Discord said no".into())));
+    let form = app.state.modal.as_ref().unwrap();
+    assert!(!form.sending && form.error.as_deref() == Some("Discord said no"));
+    app.dispatch(Action::SubmitModal);
+    app.apply(Event::ModalSubmitted(Ok(())));
+    assert!(app.state.modal.is_none());
+    app.apply(Event::InteractionFailed);
+    assert_eq!(
+        app.state.notice.as_deref(),
+        Some("This interaction failed.")
+    );
+}
+
+#[test]
 fn blocked_messages_can_leave_the_timeline_and_come_back() {
     let mut app = connected();
     let blocked = ChatMessage {

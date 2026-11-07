@@ -16,7 +16,7 @@ use tokio::sync::{broadcast, mpsc, oneshot, watch};
 use crate::{
     activity,
     api::{self, Api, PAGE, Span},
-    cache, forum, gift, guild, invite, limits,
+    cache, components, forum, gift, guild, invite, limits,
     marked::MarkedServer,
     member_list::{ListedMember, Presence},
     message::{self, Message, Names, Page, Reply},
@@ -354,7 +354,8 @@ impl std::fmt::Debug for SharedNames {
     }
 }
 
-/// A press of an app's button on a message, for [`Discord::press_button`].
+/// A press of an app's button on a message, or a pick from its menu, for
+/// [`Discord::press_button`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Press {
     /// The message's server; none in a DM.
@@ -363,7 +364,11 @@ pub struct Press {
     pub message: String,
     pub message_flags: u64,
     pub application: String,
+    /// 2 for a button, or the menu's own type.
+    pub component_type: u64,
     pub custom_id: String,
+    /// What was picked from a menu; none for a button.
+    pub values: Option<Vec<String>>,
 }
 
 /// A message event from the gateway, for any channel.
@@ -403,6 +408,11 @@ pub enum Live {
         message: String,
         key: Option<String>,
     },
+    /// An app answered a press of its button with a form to fill in.
+    Modal(Arc<components::Modal>),
+    /// An app didn't take a press of its button or a pick from its menu,
+    /// or Discord gave up waiting for it.
+    InteractionFailed,
     /// Someone else started typing; it lasts about ten seconds unless they type on.
     Typing {
         guild: Option<String>,
@@ -930,19 +940,64 @@ impl Discord {
         self.api.vote(channel, id, answers).await
     }
 
-    /// Presses an app's button on a message, from this gateway session,
-    /// which hears whether the app took it.
+    /// Presses an app's button on a message, or with `values` picks from its
+    /// menu, from this gateway session, which hears whether the app took it.
     pub async fn press_button(&self, press: Press) -> Result<()> {
+        let session = self.session_id().await?;
+        let mut data =
+            json!({"component_type": press.component_type, "custom_id": press.custom_id});
+        if let Some(values) = &press.values {
+            data["values"] = json!(values);
+        }
+        let body = json!({
+            "type": 3,
+            "nonce": crate::message::nonce(),
+            "guild_id": press.guild,
+            "channel_id": press.channel,
+            "message_flags": press.message_flags,
+            "message_id": press.message,
+            "application_id": press.application,
+            "session_id": session,
+            "data": data,
+        });
+        self.api.interact(&body).await
+    }
+
+    /// Answers an app's modal with what was filled in, field by field.
+    pub async fn submit_modal(
+        &self,
+        guild: Option<&str>,
+        modal: &components::Modal,
+        values: &[components::FieldValue],
+    ) -> Result<()> {
+        let session = self.session_id().await?;
+        let body = json!({
+            "type": 5,
+            "nonce": crate::message::nonce(),
+            "guild_id": guild,
+            "channel_id": modal.channel_id,
+            "application_id": modal.application_id,
+            "session_id": session,
+            "data": {
+                "id": modal.id,
+                "custom_id": modal.custom_id,
+                "components": components::modal_answer(modal, values),
+            },
+        });
+        self.api.interact(&body).await
+    }
+
+    /// This gateway session's id, which interactions name to hear back.
+    async fn session_id(&self) -> Result<String> {
         let (reply, answer) = oneshot::channel();
         self.requests
             .send(Request::Session(reply))
             .map_err(|_| anyhow!("Discord isn't connected. Restart Yapfast and try again."))?;
-        let session = answer
+        answer
             .await
             .ok()
             .flatten()
-            .context("Discord isn't connected yet. Try again in a moment.")?;
-        self.api.press_button(&press, &session).await
+            .context("Discord isn't connected yet. Try again in a moment.")
     }
 
     /// Closes this account's poll now.

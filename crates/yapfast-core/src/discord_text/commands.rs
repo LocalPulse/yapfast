@@ -5,7 +5,7 @@ use super::{
     render::{chat_member, mention_groups, notification, publish, send_topic, sent_id},
     *,
 };
-use crate::chat::ForwardFailure;
+use crate::chat::{ChatModal, ForwardFailure, ModalAnswer, ModalInput, ModalInputKind};
 use yapfast_discord::server_settings::GuildSettings as DiscordSettings;
 
 /// Why a Discord command fails for a room that isn't Discord's.
@@ -30,6 +30,10 @@ pub fn command(
     }
     if let Command::SendPoll { room, poll } = command {
         send_poll(discord, room, poll, events);
+        return;
+    }
+    if let Command::Discord(DiscordCommand::SubmitModal { id, answers }) = command {
+        submit_modal(discord, channels, &id, answers, events);
         return;
     }
     if let Command::MarkRead { room, sync } = &command {
@@ -103,6 +107,7 @@ pub fn command(
         | Command::Edit { room, .. }
         | Command::React { room, .. }
         | Command::PressButton { room, .. }
+        | Command::PickOptions { room, .. }
         | Command::Reactors { room, .. }
         | Command::Vote { room, .. }
         | Command::EndPoll { room, .. }
@@ -270,7 +275,13 @@ pub fn command(
         Command::React { item, key, .. } => channel.react(discord, done, &item, &key),
         Command::PressButton {
             item, custom_id, ..
-        } => channel.press_button(discord, done, &item, custom_id),
+        } => channel.press_button(discord, done, &item, custom_id, None),
+        Command::PickOptions {
+            item,
+            custom_id,
+            values,
+            ..
+        } => channel.press_button(discord, done, &item, custom_id, Some(values)),
         Command::Reactors {
             item,
             key,
@@ -628,6 +639,110 @@ pub fn finished(
     page.map(say);
 }
 
+/// An app's form as Yapfast shows it.
+fn chat_modal(discord: &Discord, modal: &yapfast_discord::components::Modal) -> ChatModal {
+    use yapfast_discord::components::FieldKind;
+    let fields = modal
+        .fields
+        .iter()
+        .map(|field| ModalInput {
+            label: field.label.clone(),
+            description: field.description.clone(),
+            kind: match &field.kind {
+                FieldKind::Text {
+                    paragraph,
+                    placeholder,
+                    value,
+                    min_length,
+                    max_length,
+                    required,
+                    ..
+                } => ModalInputKind::Text {
+                    paragraph: *paragraph,
+                    placeholder: placeholder.clone(),
+                    value: value.clone(),
+                    min_length: *min_length,
+                    max_length: *max_length,
+                    required: *required,
+                },
+                FieldKind::Select {
+                    menu,
+                    placeholder,
+                    required,
+                } => ModalInputKind::Select {
+                    options: menu
+                        .options
+                        .iter()
+                        .map(|option| CardOption {
+                            label: match &option.emoji {
+                                Some(emoji) => {
+                                    format!("{} {}", discord.render(None, emoji), option.label)
+                                        .trim_end()
+                                        .to_owned()
+                                }
+                                None => option.label.clone(),
+                            },
+                            value: option.value.clone(),
+                            description: option.description.clone(),
+                            default: option.default,
+                        })
+                        .collect(),
+                    placeholder: placeholder.clone(),
+                    min_values: menu.min_values,
+                    max_values: menu.max_values,
+                    required: *required,
+                },
+                FieldKind::Note(text) => ModalInputKind::Note(discord.render(None, text)),
+            },
+        })
+        .collect();
+    ChatModal {
+        id: modal.id.clone(),
+        title: modal.title.clone(),
+        fields,
+    }
+}
+
+/// Answers the app's form that's open, if `id` is still it.
+fn submit_modal(
+    discord: Result<&Discord, &str>,
+    channels: &mut Channels,
+    id: &str,
+    answers: Vec<ModalAnswer>,
+    events: &UnboundedSender<Event>,
+) {
+    use yapfast_discord::components::FieldValue;
+    let discord = match discord {
+        Ok(discord) => discord.clone(),
+        Err(why) => {
+            let _ = events.send(Event::ModalSubmitted(Err(why.into())));
+            return;
+        }
+    };
+    let Some((modal, guild)) = channels.modal.take_if(|(modal, _)| modal.id == id) else {
+        let _ = events.send(Event::ModalSubmitted(Err(
+            "This form is no longer open. Press the app's button again.".into(),
+        )));
+        return;
+    };
+    let values: Vec<FieldValue> = answers
+        .into_iter()
+        .map(|answer| match answer {
+            ModalAnswer::Text(text) => FieldValue::Text(text),
+            ModalAnswer::Picked(values) => FieldValue::Picked(values),
+            ModalAnswer::None => FieldValue::None,
+        })
+        .collect();
+    let events = events.clone();
+    tokio::spawn(async move {
+        let result = discord
+            .submit_modal(guild.as_deref(), &modal, &values)
+            .await
+            .map_err(|error| error.to_string());
+        let _ = events.send(Event::ModalSubmitted(result));
+    });
+}
+
 /// Applies a gateway event to the open channel and those kept. Missed
 /// events reload the open one; the others load again when next opened.
 pub fn live(
@@ -642,6 +757,23 @@ pub fn live(
         tokio::spawn(yapfast_discord::service::keep_favorite_gifs(
             favorites.clone(),
         ));
+        return;
+    }
+    if let Ok(Live::Modal(modal)) = &event {
+        // It's for the channel the press was in: the open one or the thread
+        // beside it, whose server it answers in.
+        let guild = [channels.open.as_ref(), channels.aside.as_ref()]
+            .into_iter()
+            .flatten()
+            .find(|channel| channel.channel == modal.channel_id)
+            .map(|channel| channel.guild.clone())
+            .filter(|guild| guild != crate::discord::DM_GUILD);
+        channels.modal = Some((Arc::clone(modal), guild));
+        let _ = events.send(Event::Modal(chat_modal(discord, modal)));
+        return;
+    }
+    if let Ok(Live::InteractionFailed) = &event {
+        let _ = events.send(Event::InteractionFailed);
         return;
     }
     if let Ok(Live::MfaRequired { id, methods }) = &event {

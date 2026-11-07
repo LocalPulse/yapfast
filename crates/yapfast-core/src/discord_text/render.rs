@@ -696,9 +696,41 @@ pub(super) fn chat_card(
                     large: *large,
                 },
                 Row::Buttons(buttons) => CardRow::Buttons(buttons.iter().map(button).collect()),
-                Row::Select { text, disabled } => CardRow::Select {
+                Row::Select {
+                    text,
+                    disabled,
+                    menu,
+                } => CardRow::Select {
                     text: text.clone(),
                     disabled: *disabled,
+                    // Menus of people, roles or channels don't open yet.
+                    menu: menu
+                        .as_ref()
+                        .filter(|menu| menu.of_options())
+                        .map(|menu| CardMenu {
+                            custom_id: menu.custom_id.clone(),
+                            options: menu
+                                .options
+                                .iter()
+                                .map(|option| CardOption {
+                                    label: match &option.emoji {
+                                        Some(emoji) => format!(
+                                            "{} {}",
+                                            discord.render(server, emoji),
+                                            option.label
+                                        )
+                                        .trim_end()
+                                        .to_owned(),
+                                        None => option.label.clone(),
+                                    },
+                                    value: option.value.clone(),
+                                    description: option.description.clone(),
+                                    default: option.default,
+                                })
+                                .collect(),
+                            min_values: menu.min_values,
+                            max_values: menu.max_values,
+                        }),
                 },
                 Row::Unknown => CardRow::Unknown,
             })

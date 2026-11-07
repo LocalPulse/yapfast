@@ -1398,13 +1398,84 @@ pub enum CardRow {
         large: bool,
     },
     Buttons(Vec<CardButton>),
-    /// A menu, by what it shows before it's opened.
+    /// A menu, by what it shows before it's opened, and what it offers
+    /// when it opens.
     Select {
         text: String,
         disabled: bool,
+        menu: Option<CardMenu>,
     },
     /// Components of a kind Yapfast can't show.
     Unknown,
+}
+
+/// A Discord app's menu of options: picking asks the app, by its
+/// `custom_id`, with [`Command::PickOptions`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CardMenu {
+    pub custom_id: String,
+    pub options: Vec<CardOption>,
+    /// How many may be picked.
+    pub min_values: u32,
+    pub max_values: u32,
+}
+
+/// A form a Discord app opened in answer to a press: text inputs and
+/// menus, each under its label.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ChatModal {
+    /// What [`DiscordCommand::SubmitModal`] answers it by.
+    pub id: String,
+    pub title: String,
+    pub fields: Vec<ModalInput>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModalInput {
+    pub label: String,
+    pub description: Option<String>,
+    pub kind: ModalInputKind,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ModalInputKind {
+    Text {
+        /// Several lines.
+        paragraph: bool,
+        placeholder: Option<String>,
+        /// What it starts with.
+        value: String,
+        min_length: u32,
+        max_length: u32,
+        required: bool,
+    },
+    Select {
+        options: Vec<CardOption>,
+        placeholder: Option<String>,
+        min_values: u32,
+        max_values: u32,
+        required: bool,
+    },
+    /// Text it shows between its fields.
+    Note(String),
+}
+
+/// What's filled in for a field of a [`ChatModal`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ModalAnswer {
+    Text(String),
+    Picked(Vec<String>),
+    /// A note, which answers nothing.
+    None,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CardOption {
+    /// Its emoji, a custom one by `:name:`, then its label.
+    pub label: String,
+    pub value: String,
+    pub description: Option<String>,
+    pub default: bool,
 }
 
 /// What a section shows beside its text.
@@ -1711,6 +1782,14 @@ pub enum Command {
         room: String,
         item: String,
         custom_id: String,
+    },
+    /// Pick `values` from a Discord app's menu on an item, as
+    /// [`Command::PressButton`] presses a button.
+    PickOptions {
+        room: String,
+        item: String,
+        custom_id: String,
+        values: Vec<String>,
     },
     /// Who reacted to an item with `key`: up to `limit` of them, after the
     /// one with id `after`. [`Event::Reactors`] follows.
@@ -2078,6 +2157,12 @@ pub struct OAuthPreview {
 /// Commands only the linked Discord account carries out.
 #[derive(Clone)]
 pub enum DiscordCommand {
+    /// Answers the app's form [`Event::Modal`] opened, by its id, with what
+    /// was filled in, field by field; [`Event::ModalSubmitted`] follows.
+    SubmitModal {
+        id: String,
+        answers: Vec<ModalAnswer>,
+    },
     /// Downloads these pictures for the disk cache alone, decoding none and
     /// holding none in memory: what a start prefetches so that the picker's
     /// first look finds its emoji kept. See [`Pictures::prefetch`].
@@ -3250,6 +3335,7 @@ impl Command {
             | Command::Edit { room, .. }
             | Command::React { room, .. }
             | Command::PressButton { room, .. }
+            | Command::PickOptions { room, .. }
             | Command::Reactors { room, .. }
             | Command::Vote { room, .. }
             | Command::SendPoll { room, .. }
@@ -3802,6 +3888,13 @@ pub enum Event {
         limit: u32,
         result: Result<Vec<Reactor>, String>,
     },
+    /// A Discord app answered a press with a form to fill in.
+    Modal(ChatModal),
+    /// [`DiscordCommand::SubmitModal`]'s answer went, or why it didn't.
+    ModalSubmitted(Result<(), String>),
+    /// A Discord app didn't take a press of its button or a pick from its
+    /// menu, as Discord's "This interaction failed".
+    InteractionFailed,
     /// [`Command::SendPoll`]'s poll went up in `room`, or why it didn't.
     PollPosted {
         room: String,

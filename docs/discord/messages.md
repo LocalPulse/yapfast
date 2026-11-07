@@ -461,8 +461,26 @@ gateway session's id, a fresh nonce, and `{"component_type": 2,
 "custom_id": …}`. Discord answers 204 and tells the session of the outcome
 with INTERACTION_SUCCESS or INTERACTION_FAILURE; the app answers in the
 channel with a message or an edit, which arrive as any other. A failed
-request shows in the channel's error line. Menus still show without
-opening, and an app's modal (INTERACTION_MODAL_CREATE) doesn't show yet.
+request shows in the channel's error line, and INTERACTION_FAILURE, an app
+that didn't answer, shows "This interaction failed."
+
+A menu of the app's own options opens under its box with those options,
+the ones it picks by default already picked. In a menu of one, a click
+sends the pick; in a menu of several, clicks pick up to its `max_values`
+and Done sends them, once there are at least `min_values`. The pick goes as
+a press does, with the menu's own component type and `values`. Menus of
+people, roles or channels still show without opening.
+
+An app may answer a press with a form, INTERACTION_MODAL_CREATE, which
+opens as a dialog: its title, then each field under its label, as a Label
+(type 18) or, in older forms, an action row carries it. Text inputs, one
+line or several, start with the app's value and count toward its
+`max_length`; menus of options pick as above; text displays show between
+them. Submit checks each field as Discord's client does (required, and
+`min_length` or `min_values`) and shows what's wrong under it. The answer
+is type 5, naming the interaction that opened the form, with each field's
+value back in the shape it came in; the form closes once Discord takes it.
+Fields of kinds Yapfast can't fill, such as file uploads, are left out.
 
 ## GIFs
 

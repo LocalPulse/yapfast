@@ -885,9 +885,20 @@ fn card_row<'a>(
             )),
             ..Default::default()
         },
-        Row::Select { text, .. } => CardRow {
+        Row::Select {
+            text,
+            disabled,
+            menu,
+        } => CardRow {
             kind: CardRowKind::Select,
             select: text.as_str().into(),
+            // A menu that opens: its own options, and not disabled.
+            menu_id: menu
+                .as_ref()
+                .filter(|_| !disabled)
+                .map(|menu| menu.custom_id.as_str())
+                .unwrap_or_default()
+                .into(),
             ..Default::default()
         },
         Row::Unknown => CardRow {

@@ -56,6 +56,8 @@ pub struct Channels {
     pub(super) typed: Option<(String, Instant)>,
     /// Counts member searches, so one typed over before it went is dropped.
     pub(super) searches: Arc<std::sync::atomic::AtomicU64>,
+    /// The app's form open, with its server: none for a DM's.
+    pub(super) modal: Option<(Arc<yapfast_discord::components::Modal>, Option<String>)>,
 }
 
 /// How long a member search waits for more typing before it goes to Discord.

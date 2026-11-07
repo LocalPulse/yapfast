@@ -2575,6 +2575,8 @@ impl Adapter {
         });
         self.show_person_dialog(window);
         self.show_poll_draft(window);
+        self.show_app_modal(window);
+        self.show_app_menu(window);
         let editor = state.status_editor.as_ref();
         // Opening the dialog starts from the status there is.
         if editor.is_some() && !window.get_status_open() {

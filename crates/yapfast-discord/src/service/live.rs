@@ -254,6 +254,11 @@ pub(super) fn live_events(
         }
         // Answers to the member requests history makes.
         Event::GuildMembersChunk => vec![Live::Names],
+        Event::InteractionModalCreate => crate::components::modal(data)
+            .map(|modal| Live::Modal(std::sync::Arc::new(modal)))
+            .into_iter()
+            .collect(),
+        Event::InteractionFailure => vec![Live::InteractionFailed],
         // The favourite GIFs and sounds and the places used, changed here
         // or by another client.
         Event::UserSettingsProtoUpdate if data["settings"]["type"] == 2 => {
