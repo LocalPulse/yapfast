@@ -140,6 +140,10 @@ def main():
         package = temporary / f"{base}-windows-x64"
         package.mkdir()
         shutil.copy2(executable, package / "yapfast.exe")
+        # The MCP server for Discord, when it was built; see docs/discord/mcp.md.
+        mcp = executable.with_name("yapfast-discord-mcp.exe")
+        if mcp.is_file():
+            shutil.copy2(mcp, package / "yapfast-discord-mcp.exe")
         shutil.copy2(ROOT / "LICENSE", package / "LICENSE.txt")
         # The source snapshot goes beside the packages, on the release page,
         # rather than into every install; SOURCE.txt says where.

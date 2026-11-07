@@ -2131,6 +2131,31 @@ impl Api {
             .context("the download stopped")
     }
 
+    /// Any request to the API, for the MCP server: `method` on `path` (under
+    /// /api/v9), with `body` as JSON, through the same headers and rate
+    /// limits as the rest. An empty answer, as a 204's, is `null`.
+    pub async fn raw(&self, method: &str, path: &str, body: Option<&Value>) -> Result<Value> {
+        let method = Method::from_bytes(method.as_bytes())
+            .map_err(|_| anyhow!("{method} isn't an HTTP method"))?;
+        if !path.starts_with('/') || path.contains("://") {
+            bail!("the path must start with /");
+        }
+        let request = self.request(method, path);
+        let request = match body {
+            Some(body) => with_json(request, body),
+            None => request,
+        };
+        let response = self.execute(request).await?;
+        let bytes = response
+            .bytes()
+            .await
+            .context("could not read Discord's answer")?;
+        if bytes.is_empty() {
+            return Ok(Value::Null);
+        }
+        serde_json::from_slice(&bytes).context("could not understand Discord's answer")
+    }
+
     async fn json(&self, request: RequestBuilder) -> Result<Value> {
         let response = self.execute(request).await?;
         let body = response
