@@ -78,6 +78,8 @@ export struct RoomRow {
     /// a Discord channel list drags and drops, counting from 1; 0 for
     /// neither, such as a thread or a pinned channel.
     place: int, heading-place: int,
+    /// A pinned DM category's heading shows in its colour.
+    heading-color: color, heading-tinted: bool,
 }
 
 // A call going on in a server: a white speaker on green, on a thin ring of
@@ -584,6 +586,9 @@ component DropLine inherits Rectangle {
 component CategoryHeading inherits Rectangle {
     in property <string> text;
     in property <bool> collapsed;
+    /// A pinned DM category's colour, which its text takes.
+    in property <color> tint;
+    in property <bool> tinted;
     /// It may be dragged, as ChannelRow may.
     in property <bool> draggable;
     callback start-drag(length) -> bool;
@@ -599,7 +604,8 @@ component CategoryHeading inherits Rectangle {
     accessible-label: root.text + (root.collapsed ? ", collapsed" : ", expanded");
     accessible-action-default => { root.toggled(); }
     forward-focus: focus;
-    property <color> ink: touch.has-hover ? Theme.secondary : Theme.muted;
+    property <color> ink: root.tinted ? (touch.has-hover ? root.tint.brighter(20%) : root.tint)
+        : touch.has-hover ? Theme.secondary : Theme.muted;
     HorizontalLayout {
         padding-left: 2px; spacing: 2px;
         Image {
@@ -874,6 +880,8 @@ export component RoomList inherits Rectangle {
     /// A category's heading was clicked, by the row's category: collapse or
     /// open it.
     callback toggle-category(string);
+    /// A PinDMs category's editor was asked for by its folding id.
+    callback edit-pin-category(string);
     /// A category's menu was asked for, by its first channel's id.
     callback open-category-menu(string, length, length);
     /// Dragging a Discord server's channels and categories, by their rows'
@@ -985,8 +993,12 @@ export component RoomList inherits Rectangle {
                 }
                 if room.heading != "" && !(room.pinned && !room.direct): CategoryHeading {
                     text: room.heading; collapsed: room.collapsed;
+                    tint: room.heading-color; tinted: room.heading-tinted;
                     toggled => { root.toggle-category(room.category); }
-                    context-menu(x, y) => { root.open-category-menu(room.id, x, y); }
+                    context-menu(x, y) => {
+                        if !room.direct { root.open-category-menu(room.id, x, y); }
+                        if room.direct && room.category != "dm:others" { root.edit-pin-category(room.category); }
+                    }
                     draggable: room.heading-place > 0; tracking: root.arranging > 0;
                     start-drag(y) => { return root.begin(room.heading-place, room, true, y); }
                     dragged(y) => { root.drag-y = y; }

@@ -36,6 +36,7 @@ use yapfast_core::{
 use crate::drop::Drag;
 use crate::{autostart, custom_emoji, emoji, emoji_text, graphics, zoom};
 
+mod active_now;
 mod app_forms;
 mod appearance;
 mod away;
@@ -52,6 +53,7 @@ mod messages;
 #[cfg(windows)]
 mod move_loop;
 mod pictures;
+mod pin_dms;
 mod placement;
 mod polls;
 mod profile;
@@ -1032,6 +1034,11 @@ struct Layout {
     flash_taskbar: Option<bool>,
     /// DMs pinned to the top of the DM list, by room ID, the first pinned first.
     pinned: Vec<String>,
+    /// DMs pinned in categories below those, as Vencord's PinDMs keeps
+    /// them; see `pin_dms`.
+    pin_categories: Vec<pin_dms::PinCategory>,
+    /// Vencord's PinDMs categories were looked for once, for this account.
+    vencord_pins_for: Option<String>,
     /// Message times as 9:41 PM rather than 21:41.
     twelve_hour_clock: bool,
     /// Message times with their seconds, as 21:41:05.
@@ -1480,6 +1487,8 @@ struct Models {
     /// Discord friends: all of them, and those around.
     friends: Rc<VecModel<FriendRow>>,
     friends_online: Rc<VecModel<FriendRow>>,
+    /// The friends page's Active Now cards.
+    active_now: Rc<VecModel<ActiveNowCard>>,
     /// Those the Discord account blocked, for Settings.
     blocked: Rc<VecModel<BlockedRow>>,
     /// Browse Channels' rows, after its search.
@@ -1538,6 +1547,7 @@ impl Models {
         window.set_entrance_servers(ModelRc::from(self.entrance_servers.clone()));
         window.set_friends(ModelRc::from(self.friends.clone()));
         window.set_friends_online(ModelRc::from(self.friends_online.clone()));
+        window.set_active_now(ModelRc::from(self.active_now.clone()));
         window.set_blocked_people(ModelRc::from(self.blocked.clone()));
         window.set_browse_rows(ModelRc::from(self.browse_rows.clone()));
         window.set_microphones(ModelRc::from(self.microphones.clone()));
@@ -1622,6 +1632,10 @@ struct Adapter {
     call_timer: call_timer::CallTimer,
     /// Ticks ActivityClock while a profile on screen times an activity.
     activity_clock: slint::Timer,
+    /// Keeps ActivityClock current for Active Now's timers.
+    active_now_clock: slint::Timer,
+    /// The PinDMs category being edited, and a DM to put into a new one.
+    pin_category_edit: Option<pin_dms::CategoryEdit>,
     navigation: Navigation,
     /// Whether the forward dialog was open at the last refresh.
     forwarding: bool,
@@ -1915,6 +1929,8 @@ impl Adapter {
                 away: away::Away::default(),
                 call_timer: call_timer::CallTimer::default(),
                 activity_clock: slint::Timer::default(),
+                active_now_clock: slint::Timer::default(),
+                pin_category_edit: None,
                 navigation: Navigation::default(),
                 forwarding: false,
                 selection_version: 0,

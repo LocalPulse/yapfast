@@ -2122,7 +2122,7 @@ fn menus_offer_what_fits_their_conversation_or_server() {
     app.apply(Event::Rooms(RoomIndex { rooms, servers }));
     assert_eq!(
         app.state.menu_choices("dm"),
-        [Profile, Pin, CopyLink, CopyId]
+        [Profile, Pin, PinToCategory, CopyLink, CopyId]
     );
     assert_eq!(
         app.state.menu_choices("general"),
@@ -2246,6 +2246,7 @@ fn a_discord_dms_menu_manages_its_person_and_notifications() {
         [
             Profile,
             Pin,
+            PinToCategory,
             Call,
             AddNote,
             EditNickname,
@@ -2261,13 +2262,23 @@ fn a_discord_dms_menu_manages_its_person_and_notifications() {
     // A group has no one person to manage.
     assert_eq!(
         app.state.menu_choices("discord:@me:31"),
-        [Pin, Call, Mute, LeaveGroup, CopyLink, CopyId]
+        [Pin, PinToCategory, Call, Mute, LeaveGroup, CopyLink, CopyId]
     );
     app.apply(discord_event(snapshot(false, true, true, true)));
     assert_eq!(
         app.state.menu_choices(dm),
         [
-            Profile, Pin, Call, AddNote, CloseDm, Unignore, Unblock, Unmute, CopyLink, CopyId
+            Profile,
+            Pin,
+            PinToCategory,
+            Call,
+            AddNote,
+            CloseDm,
+            Unignore,
+            Unblock,
+            Unmute,
+            CopyLink,
+            CopyId
         ],
         "no nickname nor unfriending for someone who isn't a friend, nor a request to someone blocked"
     );
@@ -2387,7 +2398,7 @@ fn matrix_peoples_menus_offer_a_dm_but_not_to_this_account() {
     // In their own DM, someone's menu is the DM's.
     assert_eq!(
         app.state.person_choices("@dm:preview.local"),
-        [Profile, Pin, CopyId]
+        [Profile, Pin, PinToCategory, CopyId]
     );
     assert_eq!(
         app.state.person_choices("@bob:test"),
@@ -6143,7 +6154,7 @@ fn leaving_a_group_dm_asks_first_and_may_tell_no_one() {
     // After muting, as in Discord's menu; a one-to-one DM closes instead.
     assert_eq!(
         app.state.menu_choices(&group),
-        [Pin, Call, Mute, LeaveGroup, CopyLink, CopyId]
+        [Pin, PinToCategory, Call, Mute, LeaveGroup, CopyLink, CopyId]
     );
     assert!(
         !app.state

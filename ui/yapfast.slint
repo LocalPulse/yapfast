@@ -43,6 +43,8 @@ import { MfaChoice, MfaPrompt, MfaDialog } from "mfa.slint";
 import { FoundRow, PickRow, ThreadRow, HeaderSearch, PinsPopover, ThreadsPopover, AddPeoplePopover, SearchPanel, TopicPopover } from "header.slint";
 import { ThreadPanel, NewThreadPanel } from "thread.slint";
 import { AppModalDialog, AppMenuPopup, ModalFieldRow, ModalOptionRow } from "app_modal.slint";
+import { ActiveNowColumn, ActiveNowCard } from "active_now.slint";
+import { PinCategoryDialog } from "pin_dms.slint";
 import { PostTag, PostRow, PostTagChoice, ForumPanel } from "forum.slint";
 import { BrowseRow, BrowseScreen } from "browse.slint";
 
@@ -58,6 +60,7 @@ export { MemberRow, ProfileBadge, ProfileConnection, ProfileEffect, ProfileRole,
 export { RequestRow, FriendRow } from "friends.slint";
 export { ContactRow, PlaceRow, ReactionPill, ReactorRow, PollAnswerDraft } from "dialogs.slint";
 export { ModalFieldKind, ModalFieldRow, ModalOptionRow } from "app_modal.slint";
+export { ActiveFace, ActiveRowKind, ActiveNowRow, ActiveNowCard } from "active_now.slint";
 export { FoundRow, PickRow } from "header.slint";
 export { GifTile, GifFavorites } from "gifs.slint";
 
@@ -122,6 +125,14 @@ export component YapfastWindow inherits Window {
     callback answer-person(string);
     callback choose-person-option(int);
     callback close-person;
+    in property <bool> pin-category-open;
+    in property <bool> pin-category-editing;
+    in-out property <string> pin-category-name;
+    in-out property <string> pin-category-color;
+    in property <string> pin-category-error;
+    callback save-pin-category;
+    callback close-pin-category;
+    callback delete-pin-category;
     // The Discord custom status and its dialog. Clear-after picks from
     // never, 30 minutes, an hour, four hours and today.
     in property <bool> has-custom-status;
@@ -816,6 +827,8 @@ export component YapfastWindow inherits Window {
     in property <bool> friends-open;
     in property <[FriendRow]> friends;
     in property <[FriendRow]> friends-online;
+    /// Active Now beside the friends list, when the window is wide enough.
+    in property <[ActiveNowCard]> active-now;
     in property <int> friend-count;
     in-out property <string> friend-filter;
     /// The list shows all friends rather than those around.
@@ -1258,6 +1271,7 @@ export component YapfastWindow inherits Window {
     callback show-voice-person(string, string);
     /// A channel category's heading was clicked; see RoomList.
     callback toggle-category(string);
+    callback edit-pin-category(string);
     /// Dragging a Discord server's channels and categories; see RoomList.
     in property <int> room-arranging;
     in property <[bool]> room-droppable;
@@ -2265,6 +2279,7 @@ export component YapfastWindow inherits Window {
                                 arrange(place) => { root.arrange-room(place); }
                                 stop-arranging => { root.stop-arranging(); }
                                 toggle-category(category) => { root.toggle-category(category); }
+                                edit-pin-category(category) => { root.edit-pin-category(category); }
                                 open-category-menu(id, x, y) => {
                                     if root.category-of(id) != "" { root.open-context-menu(root.category-of(id), false, x, y); }
                                 }
@@ -3063,8 +3078,14 @@ export component YapfastWindow inherits Window {
                                 remove(id) => { root.remove-friend-request(id); }
                                 open(id) => { root.select-room(id); }
                             }
+                            if root.friends-open && parent.width >= 1000px: ActiveNowColumn {
+                                x: parent.width - self.width; width: 360px; height: parent.height;
+                                cards: root.active-now;
+                                open-room(room) => { root.open-conversation(room); }
+                                open-person(id, x, y) => { root.open-context-menu(id, true, x, y); }
+                            }
                             if root.friends-open: FriendsScreen {
-                                width: parent.width; height: parent.height;
+                                width: parent.width - (parent.width >= 1000px ? 360px : 0px); height: parent.height;
                                 rows: root.friends-all ? root.friends : root.friends-online;
                                 all: root.friends-all; total: root.friend-count;
                                 filter <=> root.friend-filter;
@@ -4229,6 +4250,16 @@ export component YapfastWindow inherits Window {
                 ReactionHover.item = ""; ReactionHover.key = ""; ReactionHover.on-tip = false;
             }
         }
+    }
+    PinCategoryDialog {
+        open: root.pin-category-open;
+        editing: root.pin-category-editing;
+        category-name <=> root.pin-category-name;
+        category-color <=> root.pin-category-color;
+        error: root.pin-category-error;
+        save => { root.save-pin-category(); }
+        cancel => { root.close-pin-category(); }
+        delete => { root.delete-pin-category(); }
     }
     // Files dragged over the window, as Discord shows them: a card over the
     // dimmed window saying where they'll go. A drop it refuses says why
