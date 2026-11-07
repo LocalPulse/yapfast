@@ -4224,16 +4224,24 @@ fn discord_profiles_load_the_rest_from_discord() {
             handle: "ann".into(),
             banner: Some("ann-banner.png".into()),
             bio: "Hi".into(),
+            badges: vec![crate::chat::ProfileBadge {
+                id: "hypesquad".into(),
+                icon: Some("ann-badge.png".into()),
+                ..Default::default()
+            }],
+            server_tag: Some(("blend".into(), "ann-tag.png".into())),
             ..Default::default()
         }),
     });
-    assert!(
-        effects.iter().any(|effect| matches!(
-            effect,
-            Effect::Backend(Command::Discord(DiscordCommand::Pictures(urls))) if urls.iter().any(|url| url == "ann-banner.png")
-        )),
-        "the banner downloads"
-    );
+    for picture in ["ann-banner.png", "ann-badge.png", "ann-tag.png"] {
+        assert!(
+            effects.iter().any(|effect| matches!(
+                effect,
+                Effect::Backend(Command::Discord(DiscordCommand::Pictures(urls))) if urls.iter().any(|url| url == picture)
+            )),
+            "{picture} downloads"
+        );
+    }
     let view = app.state.profile.as_ref().unwrap();
     assert!(!view.loading && view.note.is_none());
     assert_eq!(

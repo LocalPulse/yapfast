@@ -2333,7 +2333,7 @@ fn pictures_on_screen<'a>(
                 .chain(&state.panel_profile)
                 .flat_map(|view| {
                     let profile = &view.profile;
-                    [&profile.avatar, &profile.banner]
+                    [&profile.avatar, &profile.banner, &profile.nameplate]
                         .into_iter()
                         .chain(
                             profile
@@ -2342,7 +2342,12 @@ fn pictures_on_screen<'a>(
                                 .flat_map(|server| [&server.icon, &server.banner]),
                         )
                         .chain(profile.friends.iter().map(|friend| &friend.avatar))
+                        .chain(profile.badges.iter().map(|badge| &badge.icon))
                         .filter_map(Option::as_deref)
+                        // The cosmetics: the server tag's badge and the
+                        // profile's effects.
+                        .chain(profile.server_tag.iter().map(|tag| tag.1.as_str()))
+                        .chain(profile.effects.iter().map(|effect| effect.image.as_str()))
                 }),
         )
         .chain(
