@@ -553,6 +553,7 @@ impl Adapter {
     /// The rail, the channel or DM list, and the friends and requests screens,
     /// built again only when what they show changed.
     pub(super) fn show_sidebar(&mut self, window: &YapfastWindow) {
+        self.take_vencord_pins();
         if self
             .sidebar
             .as_ref()
@@ -607,6 +608,10 @@ impl Adapter {
         let mut listed_text = false;
         let mut listed_voice = false;
         let mut category = None;
+        // The DM list's last heading: a pinned category's place, or none
+        // for the DMs in no category.
+        let mut dm_group: Option<Option<usize>> = None;
+        let pin_categories = &self.layout.pin_categories;
         let mut listed: Vec<_> = state
             .scoped_rooms()
             .filter(|room| room.name.to_lowercase().contains(&query))
@@ -664,6 +669,12 @@ impl Adapter {
             .collect();
         update_model(&self.models.friends_online, around);
         update_model(&self.models.friends, friend_rows);
+        let cards = self.active_now_cards(&rooms_by_id);
+        let timed = cards
+            .iter()
+            .any(|card| card.start > 0 || card.rows.iter().any(|row| row.start > 0));
+        update_model(&self.models.active_now, cards);
+        self.tick_active_now(window, timed && state.dm_screen == Some(DmScreen::Friends));
         window.set_friend_count(i32::try_from(state.friends.len()).unwrap_or(i32::MAX));
         // Those blocked, for Settings.
         update_model(
@@ -711,14 +722,18 @@ impl Adapter {
             listed.retain(|room| {
                 room.category != discord::REQUESTS && room.category != discord::SPAM
             });
-            // Pinned DMs come first, in the order they were pinned.
-            listed.sort_by_key(|room| {
-                state
-                    .pinned
-                    .iter()
-                    .position(|id| *id == room.id)
-                    .unwrap_or(usize::MAX)
-            });
+            // Pinned DMs come first, in the order they were pinned; then
+            // each category of pinned DMs, as Vencord's PinDMs orders them;
+            // then the rest, newest first as before.
+            listed.sort_by_key(
+                |room| match state.pinned.iter().position(|id| *id == room.id) {
+                    Some(at) => (0, 0, at),
+                    None => match super::pin_dms::place(pin_categories, &room.id) {
+                        Some((category, at)) => (1, category, at),
+                        None => (2, 0, 0),
+                    },
+                },
+            );
         }
         // A Discord server's pinned channels come first, each with its
         // threads, under a heading of their own; as in Discord, they leave
@@ -749,8 +764,26 @@ impl Adapter {
             .enumerate()
             .map(|(index, room)| {
                 let mut folds_by = None;
+                let mut heading_color = None;
+                let mut dm_folds_by = None;
                 let heading = if direct {
-                    String::new()
+                    // Pinned in no category: no heading, as before.
+                    if state.pinned.contains(&room.id) || pin_categories.is_empty() {
+                        String::new()
+                    } else {
+                        let group = super::pin_dms::place(pin_categories, &room.id)
+                            .map(|(category, _)| category);
+                        if dm_group.replace(group) == Some(group) {
+                            String::new()
+                        } else if let Some(category) = group.map(|at| &pin_categories[at]) {
+                            heading_color = Some(category.color);
+                            dm_folds_by = Some(super::pin_dms::folds_by(category));
+                            category.name.clone()
+                        } else {
+                            dm_folds_by = Some(super::pin_dms::OTHERS.to_owned());
+                            "DIRECT MESSAGES".into()
+                        }
+                    }
                 } else if index < in_pinned {
                     if index == 0 { "PINNED CHANNELS" } else { "" }.into()
                 } else if room.capabilities.categories {
@@ -781,7 +814,15 @@ impl Adapter {
                 RoomRow {
                     id: room.id.clone().into(),
                     name: room.name.clone().into(),
-                    category: folds_by.unwrap_or(&heading).into(),
+                    category: dm_folds_by
+                        .as_deref()
+                        .or(folds_by)
+                        .unwrap_or(&heading)
+                        .into(),
+                    heading_tinted: heading_color.is_some(),
+                    heading_color: heading_color.map_or(slint::Color::default(), |rgb| {
+                        slint::Color::from_rgb_u8((rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8)
+                    }),
                     heading: heading.into(),
                     icon: self.icons.room(room),
                     selected: Some(&room.id) == state.selected.as_ref(),
@@ -878,6 +919,17 @@ impl Adapter {
                     None => rest,
                 });
                 rows
+            }
+            // Pinned categories and the other DMs fold as they were left.
+            Navigation::DirectMessages if query.is_empty() => {
+                match self.layout.collapsed.get(super::pin_dms::FOLDS_UNDER) {
+                    Some(collapsed) => fold_collapsed(
+                        rows,
+                        collapsed,
+                        state.voice.room.as_deref().filter(|_| state.voice.active()),
+                    ),
+                    None => rows,
+                }
             }
             _ => rows,
         };
@@ -4239,7 +4291,10 @@ pub(super) fn fold_collapsed(
             folded.push(RoomRow {
                 id: row.id,
                 heading: row.heading,
+                heading_color: row.heading_color,
+                heading_tinted: row.heading_tinted,
                 category: row.category,
+                direct: row.direct,
                 collapsed: true,
                 hidden: true,
                 ..Default::default()

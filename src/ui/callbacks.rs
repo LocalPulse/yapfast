@@ -2016,8 +2016,10 @@ pub(super) fn bind_callbacks(window: &YapfastWindow, adapter: &Rc<RefCell<Adapte
     window.on_toggle_category(move |category| {
         let Some(window) = weak.upgrade() else { return };
         let mut adapter = state.borrow_mut();
-        let Navigation::Server(server) = adapter.app.state.navigation.clone() else {
-            return;
+        // The DM list's pinned categories fold as a server's categories do.
+        let server = match adapter.app.state.navigation.clone() {
+            Navigation::Server(server) => server,
+            Navigation::DirectMessages => super::pin_dms::FOLDS_UNDER.to_owned(),
         };
         let collapsed = adapter.layout.collapsed.entry(server.clone()).or_default();
         if !collapsed.remove(category.as_str()) {

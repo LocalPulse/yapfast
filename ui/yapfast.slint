@@ -43,6 +43,7 @@ import { MfaChoice, MfaPrompt, MfaDialog } from "mfa.slint";
 import { FoundRow, PickRow, ThreadRow, HeaderSearch, PinsPopover, ThreadsPopover, AddPeoplePopover, SearchPanel, TopicPopover } from "header.slint";
 import { ThreadPanel, NewThreadPanel } from "thread.slint";
 import { AppModalDialog, AppMenuPopup, ModalFieldRow, ModalOptionRow } from "app_modal.slint";
+import { ActiveNowColumn, ActiveNowCard } from "active_now.slint";
 import { PostTag, PostRow, PostTagChoice, ForumPanel } from "forum.slint";
 import { BrowseRow, BrowseScreen } from "browse.slint";
 
@@ -58,6 +59,7 @@ export { MemberRow, ProfileRole, ProfileRoleRow, ProfileServerRow, ProfileFriend
 export { RequestRow, FriendRow } from "friends.slint";
 export { ContactRow, PlaceRow, ReactionPill, ReactorRow, PollAnswerDraft } from "dialogs.slint";
 export { ModalFieldKind, ModalFieldRow, ModalOptionRow } from "app_modal.slint";
+export { ActiveFace, ActiveRowKind, ActiveNowRow, ActiveNowCard } from "active_now.slint";
 export { FoundRow, PickRow } from "header.slint";
 export { GifTile, GifFavorites } from "gifs.slint";
 
@@ -816,6 +818,8 @@ export component YapfastWindow inherits Window {
     in property <bool> friends-open;
     in property <[FriendRow]> friends;
     in property <[FriendRow]> friends-online;
+    /// Active Now beside the friends list, when the window is wide enough.
+    in property <[ActiveNowCard]> active-now;
     in property <int> friend-count;
     in-out property <string> friend-filter;
     /// The list shows all friends rather than those around.
@@ -3063,8 +3067,14 @@ export component YapfastWindow inherits Window {
                                 remove(id) => { root.remove-friend-request(id); }
                                 open(id) => { root.select-room(id); }
                             }
+                            if root.friends-open && parent.width >= 1000px: ActiveNowColumn {
+                                x: parent.width - self.width; width: 360px; height: parent.height;
+                                cards: root.active-now;
+                                open-room(room) => { root.open-conversation(room); }
+                                open-person(id, x, y) => { root.open-context-menu(id, true, x, y); }
+                            }
                             if root.friends-open: FriendsScreen {
-                                width: parent.width; height: parent.height;
+                                width: parent.width - (parent.width >= 1000px ? 360px : 0px); height: parent.height;
                                 rows: root.friends-all ? root.friends : root.friends-online;
                                 all: root.friends-all; total: root.friend-count;
                                 filter <=> root.friend-filter;

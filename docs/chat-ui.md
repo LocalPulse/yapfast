@@ -435,7 +435,15 @@ The window follows Discord's arrangement:
   where the account may manage it Edit channel, Duplicate channel, Create
   text (or voice) channel, which goes in its category, and Delete channel
   after it. A pinned
-  DM stays at the top of the list, with a pin, on this device. A
+  DM stays at the top of the list, with a pin, on this device. Below those,
+  DMs pinned in categories show as Vencord's PinDMs plugin shows them: each
+  category under its name in its colour, its DMs in their order, then the
+  other DMs under "Direct Messages"; each heading folds, and a folded one
+  keeps its unread and selected DMs showing. The first time a Discord
+  account shows, Yapfast takes the categories PinDMs keeps for it in
+  Vencord's `settings.json` (`%APPDATA%\Vencord\settings` on Windows,
+  `~/.config/Vencord/settings` elsewhere), unless it has categories already;
+  they're kept in the layout, on this device (`src/ui/pin_dms.rs`). A
   Discord DM's menu also has Add note, Add or Change friend nickname, Close DM,
   Remove friend, Ignore and Block, each undone by its opposite, and Mute, whose
   submenu mutes for 15 minutes, 1, 3, 8 or 24 hours, or until unmuted, and
