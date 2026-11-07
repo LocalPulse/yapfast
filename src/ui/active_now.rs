@@ -4,7 +4,9 @@
 
 use std::collections::HashMap;
 
-use yapfast_core::chat::{ChatRoom, Friend, Presence};
+use yapfast_core::chat::ChatRoom;
+#[cfg(feature = "discord")]
+use yapfast_core::chat::{Friend, Presence};
 
 use super::*;
 
@@ -12,15 +14,18 @@ use super::*;
 const ACTIVITY_EPOCH: u64 = 1_577_836_800;
 
 /// The most faces a row shows before "+N".
+#[cfg(feature = "discord")]
 const FACES: usize = 3;
 
 /// Discord's Unix milliseconds on ActivityClock; 0 when unknown.
+#[cfg(feature = "discord")]
 fn clock(ms: Option<u64>) -> i32 {
     ms.map_or(0, |ms| {
         i32::try_from((ms / 1000).saturating_sub(ACTIVITY_EPOCH)).unwrap_or(0)
     })
 }
 
+#[cfg(feature = "discord")]
 fn face(id: &str, name: &str, avatar: Option<&str>) -> ActiveFace {
     ActiveFace {
         initial: initial(name),
@@ -30,6 +35,7 @@ fn face(id: &str, name: &str, avatar: Option<&str>) -> ActiveFace {
 }
 
 /// "A", "A and B", "A, B, and 1 other", "A, B, and 4 others".
+#[cfg(any(feature = "discord", test))]
 fn names(names: &[&str]) -> String {
     match names {
         [] => String::new(),
@@ -43,6 +49,7 @@ fn names(names: &[&str]) -> String {
 }
 
 /// A face row of people, and how many more there are.
+#[cfg(feature = "discord")]
 fn faces(people: impl Iterator<Item = ActiveFace>) -> (ModelRc<ActiveFace>, i32) {
     let all: Vec<_> = people.collect();
     let more = i32::try_from(all.len().saturating_sub(FACES)).unwrap_or(i32::MAX);
