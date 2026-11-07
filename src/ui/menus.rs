@@ -251,6 +251,8 @@ pub(super) fn menu(adapter: &Adapter, id: &str, person: bool) -> Menu {
                 mute_times()
             } else if row.id == choice_id(MenuChoice::ServerNotifications) {
                 notification_rows(app, id)
+            } else if row.id == choice_id(MenuChoice::PinToCategory) {
+                adapter.pin_category_rows()
             } else if row.id == choice_id(MenuChoice::Roles) {
                 role_rows(adapter, id)
             } else if row.id == choice_id(MenuChoice::InviteToServer) {
@@ -282,6 +284,7 @@ fn label(icons: &Icons, choice: MenuChoice, in_call: bool) -> (&'static str, &sl
         MenuChoice::CancelFriendRequest => ("Cancel friend request", &icons.cancel),
         MenuChoice::Pin => ("Pin", &icons.pin),
         MenuChoice::Unpin => ("Unpin", &icons.unpin),
+        MenuChoice::PinToCategory => ("Pin to category", &icons.pin),
         MenuChoice::Call if in_call => ("Join call", &icons.call),
         MenuChoice::Call => ("Start call", &icons.call),
         MenuChoice::AddNote => ("Add note", &icons.note),
@@ -789,6 +792,12 @@ pub(super) fn choose(
         adapter.action(window, Action::InviteToServer { user, server });
         return;
     }
+    if id == super::pin_dms::PIN_NEW || id.starts_with(super::pin_dms::PIN_TO) {
+        if let Some(room) = room.clone() {
+            adapter.choose_pin_category(window, room, id);
+        }
+        return;
+    }
     if let Some(muting) = MUTE_TIMES.into_iter().find(|&muting| mute_id(muting) == id) {
         if let Some(room) = room {
             adapter.action(window, Action::MuteDm { room, muting });
@@ -875,7 +884,10 @@ pub(super) fn choose(
         }),
         // Its roles are its submenu's, as are the servers to invite to and
         // the channels to move to.
-        MenuChoice::Roles | MenuChoice::InviteToServer | MenuChoice::MoveTo => None,
+        MenuChoice::Roles
+        | MenuChoice::InviteToServer
+        | MenuChoice::MoveTo
+        | MenuChoice::PinToCategory => None,
         MenuChoice::LocalMute => {
             if let Some(muted) = ticked {
                 yapfast_core::volume::mute(&target, muted);
@@ -1009,7 +1021,7 @@ pub(super) fn server_change(
     }
 }
 
-const CHOICES: [MenuChoice; 65] = [
+const CHOICES: [MenuChoice; 66] = [
     MenuChoice::MarkRead,
     MenuChoice::JoinVoice,
     MenuChoice::OpenChat,
@@ -1020,6 +1032,7 @@ const CHOICES: [MenuChoice; 65] = [
     MenuChoice::CancelFriendRequest,
     MenuChoice::Pin,
     MenuChoice::Unpin,
+    MenuChoice::PinToCategory,
     MenuChoice::Call,
     MenuChoice::AddNote,
     MenuChoice::AddNickname,
@@ -1089,6 +1102,7 @@ fn choice_id(choice: MenuChoice) -> &'static str {
         MenuChoice::CancelFriendRequest => "cancel-friend-request",
         MenuChoice::Pin => "pin",
         MenuChoice::Unpin => "unpin",
+        MenuChoice::PinToCategory => "pin-to-category",
         MenuChoice::Call => "call",
         MenuChoice::AddNote => "add-note",
         MenuChoice::AddNickname => "add-nickname",

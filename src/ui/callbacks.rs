@@ -2033,6 +2033,38 @@ pub(super) fn bind_callbacks(window: &YapfastWindow, adapter: &Rc<RefCell<Adapte
         adapter.sidebar = None;
         adapter.show_sidebar(&window);
     });
+    let state = adapter.clone();
+    let weak = window.as_weak();
+    window.on_save_pin_category(move || {
+        if let Some(window) = weak.upgrade() {
+            state.borrow_mut().save_category(&window);
+        }
+    });
+    let state = adapter.clone();
+    let weak = window.as_weak();
+    window.on_close_pin_category(move || {
+        if let Some(window) = weak.upgrade() {
+            state.borrow_mut().close_category_editor(&window);
+        }
+    });
+    let state = adapter.clone();
+    let weak = window.as_weak();
+    window.on_edit_pin_category(move |category| {
+        if let Some(window) = weak.upgrade()
+            && let Some(id) = category.strip_prefix("dm:pins:")
+        {
+            state
+                .borrow_mut()
+                .open_category_editor(&window, Some(id.into()), None);
+        }
+    });
+    let state = adapter.clone();
+    let weak = window.as_weak();
+    window.on_delete_pin_category(move || {
+        if let Some(window) = weak.upgrade() {
+            state.borrow_mut().delete_category(&window);
+        }
+    });
     // Dragging a Discord server's channels and categories, by their places
     // in its channel list; see RoomList.
     let state = adapter.clone();

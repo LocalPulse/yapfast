@@ -22,6 +22,8 @@ pub enum MenuChoice {
     /// Keep a DM at the top of the DM list on this device, or stop.
     Pin,
     Unpin,
+    /// Put a DM into a local PinDMs category.
+    PinToCategory,
     /// Start a DM's call, or join the one going on.
     Call,
     /// Write this account's note on a Discord DM's other person, or the
@@ -270,6 +272,7 @@ impl AppState {
             } else {
                 MenuChoice::Pin
             });
+            choices.push(MenuChoice::PinToCategory);
         }
         if room.direct && !connected && self.can_join_voice(id) {
             choices.push(MenuChoice::Call);

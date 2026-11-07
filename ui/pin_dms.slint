@@ -1,0 +1,53 @@
+import { Theme } from "theme.slint";
+import { ActionButton, TextField } from "controls.slint";
+
+export component PinCategoryDialog inherits Rectangle {
+    in property <bool> open;
+    in property <bool> editing;
+    in-out property <string> category-name;
+    in-out property <string> category-color;
+    in property <string> error;
+    callback save;
+    callback cancel;
+    callback delete;
+    visible: root.open;
+    property <bool> confirm-delete;
+    changed open => { if !root.open { root.confirm-delete = false; } }
+    background: #00000088;
+    TouchArea { clicked => { root.cancel(); } }
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 380px;
+        height: content.preferred-height;
+        border-radius: 12px;
+        background: Theme.raised;
+        border-color: Theme.edge;
+        border-width: 1px;
+        drop-shadow-blur: 32px;
+        drop-shadow-color: #00000066;
+        drop-shadow-offset-y: 12px;
+        TouchArea { }
+        content := VerticalLayout {
+            padding: 20px;
+            spacing: 12px;
+            Text { text: root.editing ? "Edit DM category" : "New DM category"; color: Theme.text; font-size: 18px; font-weight: 700; }
+            TextField { label: "Name"; placeholder: "Pinned"; text <=> root.category-name; accepted => { root.save(); } }
+            TextField { label: "Color"; placeholder: "#99aab5"; text <=> root.category-color; accepted => { root.save(); } }
+            if root.error != "": Text { text: root.error; color: Theme.danger; font-size: 13px; wrap: word-wrap; }
+            if root.confirm-delete: Text { text: "Delete this category? Its DMs stay in the list. Click Delete again to confirm."; color: Theme.danger; font-size: 13px; wrap: word-wrap; }
+            HorizontalLayout {
+                spacing: 8px;
+                if root.editing: ActionButton {
+                    text: root.confirm-delete ? "Confirm delete" : "Delete"; danger: true;
+                    clicked => {
+                        if root.confirm-delete { root.delete(); } else { root.confirm-delete = true; }
+                    }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                ActionButton { text: "Cancel"; clicked => { root.cancel(); } }
+                ActionButton { text: "Save"; primary: true; clicked => { root.save(); } }
+            }
+        }
+    }
+}

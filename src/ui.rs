@@ -1634,6 +1634,8 @@ struct Adapter {
     activity_clock: slint::Timer,
     /// Keeps ActivityClock current for Active Now's timers.
     active_now_clock: slint::Timer,
+    /// The PinDMs category being edited, and a DM to put into a new one.
+    pin_category_edit: Option<pin_dms::CategoryEdit>,
     navigation: Navigation,
     /// Whether the forward dialog was open at the last refresh.
     forwarding: bool,
@@ -1928,6 +1930,7 @@ impl Adapter {
                 call_timer: call_timer::CallTimer::default(),
                 activity_clock: slint::Timer::default(),
                 active_now_clock: slint::Timer::default(),
+                pin_category_edit: None,
                 navigation: Navigation::default(),
                 forwarding: false,
                 selection_version: 0,

@@ -119,6 +119,173 @@ pub(super) fn place(categories: &[PinCategory], room: &str) -> Option<(usize, us
     })
 }
 
+/// The category editor's target: an existing category, or a new one for a DM.
+#[derive(Clone, Debug, Default)]
+pub(super) struct CategoryEdit {
+    pub id: Option<String>,
+    pub room: Option<String>,
+}
+
+pub(super) const PIN_TO: &str = "dm-pin:";
+pub(super) const PIN_NEW: &str = "dm-pin:new";
+
+impl super::Adapter {
+    /// The categories a DM can join, then the category editor.
+    pub(super) fn pin_category_rows(&self) -> Vec<super::MenuRow> {
+        self.layout
+            .pin_categories
+            .iter()
+            .map(|category| super::MenuRow {
+                id: format!("{PIN_TO}{}", category.id).into(),
+                text: category.name.clone().into(),
+                ..Default::default()
+            })
+            .chain([super::MenuRow {
+                id: PIN_NEW.into(),
+                text: "New category...".into(),
+                separated: true,
+                ..Default::default()
+            }])
+            .collect()
+    }
+
+    pub(super) fn choose_pin_category(
+        &mut self,
+        window: &super::YapfastWindow,
+        room: String,
+        id: &str,
+    ) {
+        if id == PIN_NEW {
+            self.open_category_editor(window, None, Some(room));
+        } else if let Some(category) = id.strip_prefix(PIN_TO) {
+            self.put_in_category(window, room, category);
+        }
+    }
+
+    pub(super) fn open_category_editor(
+        &mut self,
+        window: &super::YapfastWindow,
+        id: Option<String>,
+        room: Option<String>,
+    ) {
+        let current = id.as_ref().and_then(|id| {
+            self.layout
+                .pin_categories
+                .iter()
+                .find(|category| &category.id == id)
+        });
+        window.set_pin_category_name(
+            current
+                .map_or("Pinned", |category| category.name.as_str())
+                .into(),
+        );
+        window.set_pin_category_color(
+            current
+                .map(|category| format!("#{:06x}", category.color))
+                .unwrap_or_else(|| "#99aab5".into())
+                .into(),
+        );
+        window.set_pin_category_error("".into());
+        window.set_pin_category_editing(id.is_some());
+        self.pin_category_edit = Some(CategoryEdit { id, room });
+        window.set_pin_category_open(true);
+    }
+
+    pub(super) fn close_category_editor(&mut self, window: &super::YapfastWindow) {
+        self.pin_category_edit = None;
+        window.set_pin_category_open(false);
+    }
+
+    pub(super) fn save_category(&mut self, window: &super::YapfastWindow) {
+        let Some(edit) = self.pin_category_edit.clone() else {
+            return;
+        };
+        let name = window.get_pin_category_name().trim().to_owned();
+        let color_text = window.get_pin_category_color();
+        let color_text = color_text.trim().trim_start_matches('#');
+        let color = u32::from_str_radix(color_text, 16)
+            .ok()
+            .filter(|_| color_text.len() == 6);
+        if name.is_empty() || color.is_none() {
+            window.set_pin_category_error(
+                "Enter a name and a six-digit color, such as #99aab5.".into(),
+            );
+            return;
+        }
+        let id = edit.id.unwrap_or_else(|| {
+            let nonce = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos();
+            format!("local-{nonce}")
+        });
+        if let Some(current) = self
+            .layout
+            .pin_categories
+            .iter_mut()
+            .find(|category| category.id == id)
+        {
+            current.name = name;
+            current.color = color.unwrap();
+        } else {
+            self.layout.pin_categories.push(PinCategory {
+                id: id.clone(),
+                name,
+                color: color.unwrap(),
+                rooms: Vec::new(),
+            });
+        }
+        if let Some(room) = edit.room {
+            self.put_in_category(window, room, &id);
+        }
+        self.layout.write(&self.root);
+        self.sidebar = None;
+        self.show_sidebar(window);
+        self.close_category_editor(window);
+    }
+
+    pub(super) fn delete_category(&mut self, window: &super::YapfastWindow) {
+        let Some(edit) = self.pin_category_edit.take() else {
+            return;
+        };
+        if let Some(id) = edit.id {
+            self.layout
+                .pin_categories
+                .retain(|category| category.id != id);
+            self.layout.write(&self.root);
+            self.sidebar = None;
+            self.show_sidebar(window);
+        }
+        window.set_pin_category_open(false);
+    }
+
+    fn put_in_category(&mut self, window: &super::YapfastWindow, room: String, id: &str) {
+        if self.app.state.pinned.contains(&room) {
+            self.action(
+                window,
+                yapfast_core::application::Action::Pin {
+                    room: room.clone(),
+                    pinned: false,
+                },
+            );
+        }
+        for category in &mut self.layout.pin_categories {
+            category.rooms.retain(|each| each != &room);
+        }
+        if let Some(category) = self
+            .layout
+            .pin_categories
+            .iter_mut()
+            .find(|category| category.id == id)
+        {
+            category.rooms.push(room);
+        }
+        self.layout.write(&self.root);
+        self.sidebar = None;
+        self.show_sidebar(window);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
