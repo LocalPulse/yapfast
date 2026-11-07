@@ -188,7 +188,7 @@ fn text(value: &Value) -> Option<&str> {
 
 fn theme(value: &Value) -> Option<(u32, u32)> {
     let colors = value.as_array()?;
-    Some((color(&colors[0])?, color(&colors[1])?))
+    Some((color(colors.first()?)?, color(colors.get(1)?)?))
 }
 
 /// The selected profile effect's collectible SKU, with the server's one winning.
@@ -511,6 +511,12 @@ mod tests {
                 .ends_with("/banners/1400000000000000200/def.png?size=600")
         );
         assert_eq!(profile.accent, Some(16_711_680));
+    }
+
+    #[test]
+    fn an_incomplete_profile_theme_is_ignored() {
+        assert_eq!(theme(&json!([16_711_680])), None);
+        assert_eq!(theme(&json!([])), None);
     }
 
     #[test]
