@@ -1712,6 +1712,39 @@ fn escape_markdown(text: &str) -> String {
     escaped
 }
 
+/// `text` with each `<t:SECONDS>` or `<t:SECONDS:STYLE>` written as the
+/// time it names, as [`Names::render`] writes them in messages; for text
+/// that isn't rendered otherwise, such as a bio being written.
+pub fn render_timestamps(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find("<t:") {
+        out.push_str(&rest[..start]);
+        let tag = &rest[start + 3..];
+        let parsed = tag.find('>').and_then(|end| {
+            let mut parts = tag[..end].split(':');
+            let seconds = parts.next()?.parse::<i64>().ok()?;
+            let style = parts.next();
+            parts
+                .next()
+                .is_none()
+                .then(|| (timestamp(seconds, style), end))
+        });
+        match parsed {
+            Some((time, end)) => {
+                out.push_str(&time);
+                rest = &tag[end + 1..];
+            }
+            None => {
+                out.push_str("<t:");
+                rest = tag;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
 /// Whether `<t:…>` timestamps show a 12-hour clock, as the app's setting
 /// says; the UI sets it at start and when the setting changes.
 static TWELVE_HOUR_CLOCK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -2568,6 +2601,17 @@ mod tests {
         assert!(names.decoration("2").is_some());
         names.learn_user(&json!({"id": "2", "avatar_decoration_data": null}));
         assert_eq!(names.decoration("2"), None);
+    }
+
+    #[test]
+    fn timestamps_in_plain_text_become_times() {
+        let at = 1_791_295_500;
+        let time = timestamp(at, Some("t"));
+        assert_eq!(
+            render_timestamps(&format!("My 12AM is your <t:{at}:t>!")),
+            format!("My 12AM is your {time}!")
+        );
+        assert_eq!(render_timestamps("<t:nope> and <t:1"), "<t:nope> and <t:1");
     }
 
     #[test]

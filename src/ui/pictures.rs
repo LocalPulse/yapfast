@@ -106,6 +106,17 @@ pub(super) fn refresh_avatar_sources(state: &AppState) {
     });
 }
 
+/// An avatar's or decoration's animation, by its address, as [`animation`]
+/// gives it; empty while it's still or not here.
+pub(super) fn avatar_animation(url: &str) -> (ModelRc<slint::Image>, ModelRc<i32>) {
+    AVATAR_SOURCES
+        .with_borrow(|sources| sources.get(url).and_then(std::sync::Weak::upgrade))
+        .map_or_else(
+            || (ModelRc::default(), ModelRc::default()),
+            |source| animation(&source),
+        )
+}
+
 pub(super) fn avatar_picture(url: &str) -> slint::Image {
     let source =
         AVATAR_SOURCES.with_borrow(|sources| sources.get(url).and_then(std::sync::Weak::upgrade));

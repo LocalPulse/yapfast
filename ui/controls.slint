@@ -223,6 +223,10 @@ export component DeviceToggle inherits Rectangle {
 export global PictureStore {
     in property <int> revision;
     pure callback picture(string, int) -> image;
+    /// An animated picture's frames and how long each shows, in
+    /// milliseconds; both empty for a still one or one not here yet.
+    pure callback frames(string, int) -> [image];
+    pure callback delays(string, int) -> [int];
     callback request(string);
 }
 
@@ -232,6 +236,20 @@ export global PictureStore {
 export global EmojiAnimations {
     in property <int> revision;
     pure callback frame(string, int) -> image;
+}
+
+// A picture, or an animation's frames in turn while it shows.
+export component Picture inherits Image {
+    in property <image> still;
+    in property <[image]> frames;
+    in property <[int]> delays;
+    property <int> frame;
+    source: root.frames.length > 1 ? root.frames[root.frame] : root.still;
+    Timer {
+        running: root.frames.length > 1 && Motion.playing;
+        interval: max(20, root.delays[root.frame]) * 1ms;
+        triggered => { root.frame = mod(root.frame + 1, root.frames.length); }
+    }
 }
 
 // A person's picture, or a round initial in their own tint until it arrives;
@@ -278,10 +296,15 @@ export component Avatar inherits Rectangle {
         x: -3px; y: -3px; width: root.size + 6px; height: root.size + 6px;
         border-radius: self.width / 2; border-width: 2px; border-color: Theme.live;
     }
-    if root.decoration.width > 0: Image {
+    // An animated decoration plays, as Discord's do in a profile; its
+    // first frame is often empty, so a still alone wouldn't show it.
+    if root.decoration.width > 0: Picture {
         x: -root.size * 0.1; y: -root.size * 0.1;
         width: root.size * 1.2; height: root.size * 1.2;
-        source: root.decoration; image-fit: contain;
+        still: root.decoration;
+        frames: PictureStore.frames(root.decoration-url, PictureStore.revision);
+        delays: PictureStore.delays(root.decoration-url, PictureStore.revision);
+        image-fit: contain;
         accessible-role: none;
     }
 }
@@ -451,19 +474,6 @@ export global Motion {
     in property <bool> playing: true;
 }
 
-// A picture, or an animation's frames in turn while it shows.
-export component Picture inherits Image {
-    in property <image> still;
-    in property <[image]> frames;
-    in property <[int]> delays;
-    property <int> frame;
-    source: root.frames.length > 1 ? root.frames[root.frame] : root.still;
-    Timer {
-        running: root.frames.length > 1 && Motion.playing;
-        interval: max(20, root.delays[root.frame]) * 1ms;
-        triggered => { root.frame = mod(root.frame + 1, root.frames.length); }
-    }
-}
 
 // Stands in for something on its way, such as a picture or the messages,
 // with a light sweeping across it as in Discord.
