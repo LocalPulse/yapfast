@@ -307,8 +307,10 @@ impl StreamReceiver {
         let (user, channel, streamer) = ids(&server)?;
         let shared = Shared::new((0, 0));
         *lock(&shared.offers) = decodes;
-        // Frames waiting to be decoded; more means decoding can't keep up.
-        let (frames, receiver) = channel::sync_channel(4);
+        // Frames waiting to be decoded, half a second at 60 a second: a
+        // hiccup in decoding or showing passes, rather than costing the
+        // frames until a keyframe; more means decoding can't keep up.
+        let (frames, receiver) = channel::sync_channel(30);
         // Opus frames waiting to be played: 320 ms.
         let (sounds, heard) = channel::sync_channel(16);
         let (stop, stopped) = oneshot::channel();

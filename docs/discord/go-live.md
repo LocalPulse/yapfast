@@ -183,8 +183,11 @@ the streamer's RTX SSRC (RFC 4588); padding there, which probes the path, is
 dropped. Packets after a gap wait for it at most 300 ms. A frame still missing
 a packet is dropped, and so is everything after it until the next keyframe. So
 are frames while none has come yet, and after one the decoder was too far
-behind to take. The connection asks for a keyframe with a picture loss
-indication, at most every 500 ms. It sends a receiver report every second
+behind to take; up to 30 frames wait for the decoder. The connection asks for
+a keyframe with a picture loss indication, at most every 500 ms. A streamer
+may never answer it, so once the stream has shown, 90 whole frames (1.5 s at
+60 a second) without a keyframe go to the decoder anyway, which recovers as
+the picture refreshes rather than freezing. It sends a receiver report every second
 (packets lost, the highest received, and the streamer's last sender report
 echoed). With `YAPFAST_LOG=debug` it logs what it received every 5 s (`stream
 received`): packets out of order, resent, recovered, given up on, and keyframes

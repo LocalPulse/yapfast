@@ -554,6 +554,9 @@ pub struct Assembled {
 
 /// The largest frame put together, far above a 4K keyframe.
 const MAX_FRAME: usize = 8 << 20;
+/// Whole frames dropped waiting for a keyframe before the rest go to the
+/// decoder anyway: a second and a half at 60 frames a second.
+const GIVE_UP_WAITING: u32 = 90;
 
 /// Puts one SSRC's packets back together into frames. A frame missing a
 /// packet is dropped, and frames are dropped until the next keyframe.
@@ -565,6 +568,11 @@ pub struct Assembler {
     damaged: bool,
     keyframe: bool,
     waiting: bool,
+    /// Whole frames dropped while waiting for a keyframe, once a frame got
+    /// through; see [`GIVE_UP_WAITING`].
+    skipped: u32,
+    /// A frame got through, so the decoder has pictures to refer to.
+    started: bool,
     /// AV1: the frame's latest OBU element, written once the next begins
     /// or the frame ends, and whether it carries on in the next packet.
     obu: Vec<u8>,
@@ -590,6 +598,8 @@ impl Assembler {
             damaged: false,
             keyframe: false,
             waiting: true,
+            skipped: 0,
+            started: false,
             obu: vec![],
             obu_open: false,
         }
@@ -663,12 +673,21 @@ impl Assembler {
             };
         }
         if self.waiting && !self.keyframe {
-            return Pushed {
-                frame: None,
-                lost: true,
-            };
+            // A sender whose encoder refreshes intra by intra may never
+            // answer a keyframe request, and Discord's server may not pass
+            // it on: past a while, the decoder gets what comes and recovers
+            // as the picture refreshes, rather than freezing.
+            self.skipped += 1;
+            if !self.started || self.skipped < GIVE_UP_WAITING {
+                return Pushed {
+                    frame: None,
+                    lost: true,
+                };
+            }
         }
         self.waiting = false;
+        self.skipped = 0;
+        self.started = true;
         Pushed {
             frame: Some(Assembled {
                 data,
@@ -1693,6 +1712,21 @@ mod tests {
             pushed.frame.is_none() && pushed.lost,
             "the decoder missed a frame"
         );
+        // No keyframe comes: past a while, the frames go to the decoder
+        // anyway, which recovers rather than freezing.
+        let mut timestamp = 6000;
+        let mut passed = None;
+        for _ in 0..GIVE_UP_WAITING {
+            timestamp += 3000;
+            passed = packetizer
+                .packets(&delta, timestamp, false)
+                .iter()
+                .map(|sent| assembler.push(&parse(sent).unwrap()))
+                .last()
+                .unwrap()
+                .frame;
+        }
+        assert_eq!(passed.map(|frame| frame.data), Some(delta.clone()));
     }
 
     #[test]
