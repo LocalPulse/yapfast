@@ -748,7 +748,7 @@ pub(crate) async fn call(
                             continue;
                         }
                         // Only a video's worker reports these.
-                        Some(Report::Opened { .. } | Report::Finished | Report::Screen { .. }) => {}
+                        Some(Report::Opened { .. } | Report::Finished | Report::Screen { .. } | Report::Stalled) => {}
                         Some(Report::Ended { error }) => {
                             if let Some(stopped) = share.take() {
                                 stopped.stop(discord, state);
@@ -846,6 +846,16 @@ pub(crate) async fn call(
                             }
                         }
                         WatchEvent::Report(Some(Report::Ended { error })) => stop = Some(error),
+                        // The picture froze while frames came: watching again
+                        // starts from a keyframe, as Discord sends one to a
+                        // viewer who joins.
+                        WatchEvent::Report(Some(Report::Stalled)) => {
+                            if let Some(stopped) = watch.take() {
+                                let user = stopped.user.clone();
+                                stopped.stop(discord, state);
+                                watch = Some(Watch::start(discord, guild, &channel, &user, state));
+                            }
+                        }
                         WatchEvent::Report(Some(
                             Report::Sharing { .. }
                             | Report::Sending(_)

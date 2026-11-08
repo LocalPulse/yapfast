@@ -315,6 +315,10 @@ pub enum Report {
         #[serde(with = "base64_pixels")]
         rgba: Vec<u8>,
     },
+    /// Watching: frames still come, but none has made a picture for a
+    /// while, as when the decoder lost its place and the streamer sends no
+    /// keyframe when asked; watching again starts from one.
+    Stalled,
     /// The job ended: without an error when it was told to stop.
     Ended { error: Option<String> },
 }
@@ -805,6 +809,9 @@ fn watch(
     let mut scratch = vec![];
     let mut shown = false;
     let mut failures = 0u64;
+    // When the last picture showed, and whether that's been too long.
+    let mut pictured = Instant::now();
+    let mut stalled = false;
     while !stop.load(Ordering::Relaxed) {
         while let Ok(control) = sound.controls.try_recv() {
             match control {
@@ -819,6 +826,14 @@ fn watch(
         let Some(frame) = receiver.next(Duration::from_millis(100)) else {
             continue;
         };
+        if shown && !stalled && pictured.elapsed() >= STALLED {
+            stalled = true;
+            tracing::info!(
+                failures,
+                "stream frames come but make no picture; watching again"
+            );
+            report(Report::Stalled);
+        }
         if decoder
             .as_ref()
             .is_none_or(|decoder| decoder.codec() != frame.codec)
@@ -847,6 +862,7 @@ fn watch(
                 continue;
             }
         };
+        pictured = Instant::now();
         let (width, height) = (picture.width, picture.height);
         if writer.fits(width, height) && width <= max_width && height <= max_height {
             writer.write(width, height, |pixels| picture.to_rgba(pixels));
@@ -864,6 +880,9 @@ fn watch(
     }
     Ok(())
 }
+
+/// How long frames may come without a picture before watching starts again.
+const STALLED: Duration = Duration::from_secs(3);
 
 /// Sleeps until the next frame is due, or returns false once told to stop.
 fn next_frame(started: Instant, frame: u64, fps: u32, stop: &AtomicBool) -> bool {

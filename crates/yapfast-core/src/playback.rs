@@ -131,7 +131,8 @@ impl Playback {
                 | Report::Sending(_)
                 | Report::Streaming
                 | Report::Preview { .. }
-                | Report::Screen { .. },
+                | Report::Screen { .. }
+                | Report::Stalled,
             )) => {}
         }
         true

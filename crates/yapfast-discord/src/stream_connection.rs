@@ -706,6 +706,9 @@ struct Streamer {
     video: Option<u32>,
     rtx: Option<u32>,
     codec: Option<Codec>,
+    /// The video came with a payload type that names its codec, so one
+    /// that doesn't isn't video.
+    typed: bool,
 }
 
 impl Streamer {
@@ -734,15 +737,20 @@ impl Streamer {
 
     /// The codec of a packet, by its payload type or, from the streamer's
     /// video SSRC, by what Discord chose.
-    fn codec(&self, packet: &rtp::Packet) -> Option<Codec> {
+    fn codec(&mut self, packet: &rtp::Packet) -> Option<Codec> {
         if Some(packet.ssrc) == self.rtx {
             return None;
         }
-        Codec::from_payload_type(packet.payload_type).or_else(|| {
-            (Some(packet.ssrc) == self.video)
-                .then_some(self.codec)
-                .flatten()
-        })
+        if let Some(codec) = Codec::from_payload_type(packet.payload_type) {
+            self.typed = true;
+            return Some(codec);
+        }
+        // Discord's session update may name another codec than the one
+        // sent: once the video's payload types name it, a packet of another
+        // type would start the frames over in the wrong codec.
+        (!self.typed && Some(packet.ssrc) == self.video)
+            .then_some(self.codec)
+            .flatten()
     }
 }
 
@@ -1037,14 +1045,19 @@ mod tests {
             payload: &[],
         };
         assert_eq!(
+            streamer.codec(&packet(11, 96)),
+            Some(Codec::H264),
+            "by Discord's choice"
+        );
+        assert_eq!(
             streamer.codec(&packet(11, rtp::VP8)),
             Some(Codec::Vp8),
             "by payload type"
         );
         assert_eq!(
             streamer.codec(&packet(11, 96)),
-            Some(Codec::H264),
-            "by Discord's choice"
+            None,
+            "once the payload types name the codec, another type isn't video"
         );
         assert_eq!(
             streamer.codec(&packet(12, rtp::VP8)),

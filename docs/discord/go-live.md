@@ -187,7 +187,11 @@ behind to take; up to 30 frames wait for the decoder. The connection asks for
 a keyframe with a picture loss indication, at most every 500 ms. A streamer
 may never answer it, so once the stream has shown, 90 whole frames (1.5 s at
 60 a second) without a keyframe go to the decoder anyway, which recovers as
-the picture refreshes rather than freezing. It sends a receiver report every second
+the picture refreshes. When frames still come but none has made a picture for
+3 s, the worker reports the stream stalled and Yapfast watches it again, which
+starts from the keyframe Discord sends a viewer who joins. A packet's payload
+type names its codec; only while none has, a packet of another type on the
+streamer's video SSRC takes the codec Discord's session update names. It sends a receiver report every second
 (packets lost, the highest received, and the streamer's last sender report
 echoed). With `YAPFAST_LOG=debug` it logs what it received every 5 s (`stream
 received`): packets out of order, resent, recovered, given up on, and keyframes
